@@ -22,11 +22,15 @@ posición de los ómnibus del Sistema de Transporte Metropolitano (STM) de Monte
 - 🧭 **Sentido (ida/vuelta)**: cada destino distinto recibe un color; los buses se pintan según su
   sentido y se muestra una **leyenda**. La etiqueta de cada bus indica `→ DESTINO`.
 - 🚏 **Paradas de la línea**: al buscar una línea se dibujan las paradas por las que pasa (overlay
-  apagable), con calle y esquina en el popup.
+  apagable con checkbox), con calle y esquina en el popup.
+- 🛣️ **Recorrido por sentido**: traza la **ruta** que va a tomar cada bus (polilínea siguiendo las
+  paradas en orden), **coloreada igual que el bus** según su sentido. Es un overlay apagable con
+  checkbox ("Recorrido (sentido)"). Solo se dibujan las rutas de las variantes con buses activos.
 - 🔵 **Marcadores informativos**: círculo con el número de línea + **badge de velocidad** (🔴
   detenido / 🟠 lento / 🟢 en movimiento).
 - 🔗 **Enlaces directos**: `…/#155` o `…/#149 ADUANA` precargan la búsqueda.
 - 📱 **Responsive** (iPhone 12 mini / 14): controles apilados, `100dvh`, *safe-area*, anti-zoom iOS.
+- 🧹 **Sin publicidad**: oculta el banner/branding que somee inyecta en el plan gratuito.
 - 🚀 **Deploy automático** a somee por FTP en cada push a `main` (GitHub Actions).
 
 ## 🚀 Cómo correrlo
@@ -46,7 +50,7 @@ destino y elegí una sugerencia.
 
 | Capa | Archivo | Rol |
 |------|---------|-----|
-| **Model** | `Models/Bus.cs` | `Bus`, `LineaInfo`, `Parada` + DTOs de los GeoJSON |
+| **Model** | `Models/Bus.cs` | `Bus`, `LineaInfo`, `Parada`, `Recorrido` + DTOs de los GeoJSON |
 | **Service** | `Services/StmService.cs` | Cliente HTTP de la STM y del GeoServer (`IHttpClientFactory`) |
 | **Controller** | `Controllers/HomeController.cs` | Sirve la vista del mapa |
 | **Controller (API)** | `Controllers/BusController.cs` | Endpoints JSON que consume el frontend |
@@ -79,6 +83,14 @@ fuentes externas (así se evita CORS y se ocultan las URLs de origen).
 - **Obtengo:** `{ ok, count, paradas: [ { cod, linea, calle, esquina, lat, lng } ] }`
 - **Cómo lo manejo:** se dibujan como `circleMarker` al buscar una línea (se **cachea por
   línea**, no se recarga cada 2 s). Popup con `calle y esquina`. Es un overlay apagable.
+
+### `GET /api/bus/recorridos?variantes=4145,8863`
+- **Qué hace:** devuelve la **traza (ruta)** de cada variante: sus paradas en orden.
+- **Obtengo:** `{ ok, count, recorridos: [ { variante, paradas: [ { cod, calle, esquina, lat, lng } ] } ] }`
+  (las paradas vienen ordenadas por su `ordinal` en el recorrido).
+- **Cómo lo manejo:** el frontend toma las **variantes que tienen buses activos** (cada bus trae
+  su `variante` y `destino`), pide sus recorridos (se **cachea por set de variantes**) y dibuja una
+  **polilínea por variante coloreada según el sentido** (mismo color que el bus). Overlay apagable.
 
 ## B) Fuentes externas (consumidas por `StmService`) — **no requieren API key**
 
@@ -123,7 +135,23 @@ GET https://geoserver.montevideo.gub.uy/geoserver/wfs
   alfanumérico para evitar inyección), hace el GET y **deduplica por `cod_ubic_parada`** (una
   línea recorre varias variantes/sentidos y repite paradas).
 
-### 4. Capas de mapa (tiles, directo desde Leaflet en el navegador)
+### 4. Recorrido por variante — GeoServer (WFS)
+```
+GET https://geoserver.montevideo.gub.uy/geoserver/wfs
+    ?service=WFS&version=2.0.0&request=GetFeature
+    &typeNames=imm:Paradas_variantes_all
+    &outputFormat=application/json&srsName=EPSG:4326
+    &cql_filter=cod_variante IN (4145,8863)
+```
+- **Detalle:** mismas paradas pero **por variante** y con **cobertura completa** de variantes
+  (`v_uptu_paradas_con_horarios` solo trae las que tienen horarios). `properties`: `cod_variante`,
+  `ordinal`, `cod_ubic_parada`; `geometry` = `Point [lng, lat]`.
+- **Cómo lo manejo:** `StmService.GetRecorridosAsync` filtra por `cod_variante`, **agrupa por
+  variante y ordena por `ordinal`** para armar la secuencia de puntos de cada ruta. El frontend la
+  dibuja como polilínea coloreada por sentido. Se usa esta capa (y no la de horarios) porque tiene
+  todas las variantes.
+
+### 5. Capas de mapa (tiles, directo desde Leaflet en el navegador)
 | Capa | URL |
 |------|-----|
 | OpenStreetMap (default) | `https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png` |
@@ -139,7 +167,8 @@ GET https://geoserver.montevideo.gub.uy/geoserver/wfs
 "Stm":     { "Endpoint": "https://www.montevideo.gub.uy/buses/rest/stm-online" },
 "Paradas": {
   "WfsUrl": "https://geoserver.montevideo.gub.uy/geoserver/wfs",
-  "Layer":  "imm:v_uptu_paradas_con_horarios"
+  "Layer":  "imm:v_uptu_paradas_con_horarios",   // paradas (con calle/esquina)
+  "LayerVariantes": "imm:Paradas_variantes_all"  // recorrido por variante (cobertura completa)
 },
 "Mapa": {
   "WmsUrl": "https://geoserver.montevideo.gub.uy/geoserver/wms",
