@@ -16,6 +16,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Bus en Vivo · Montevideo</title>
 
+    <script>
+        // Quita el branding/publicidad que somee inyecta en el plan gratuito.
+        // (Solo elimina nodos de somee; no toca prototipos para no romper el resto.)
+        (function () {
+            const SEL = 'center, a[href*="somee.com"], script[src*="somee"], script[src*="ads.mgmt"], ' +
+                        'iframe[src*="somee"], iframe[src*="ads.mgmt"], [id*="WholeInsert"], [class*="WholeInsert"]';
+            const limpiar = () => {
+                try { document.querySelectorAll(SEL).forEach(el => el.remove()); } catch (_) { }
+            };
+            try {
+                new MutationObserver(limpiar).observe(document.documentElement, { childList: true, subtree: true });
+            } catch (_) { }
+            document.addEventListener('DOMContentLoaded', limpiar);
+            window.addEventListener('load', limpiar);
+        })();
+    </script>
+
     <link rel="stylesheet"
           href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
           integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
@@ -113,6 +130,13 @@
             padding: 6px 18px; font-size: .85rem; border-bottom: 1px solid #6b2b2b;
         }
 
+        /* Oculta el branding/anuncios que somee inyecta en el plan gratuito */
+        center,
+        a[href*="somee.com"],
+        iframe[src*="somee"],
+        [id*="WholeInsert"],
+        [class*="WholeInsert"] { display: none !important; }
+
         /* ===== Celulares (iPhone 12 mini 360px, iPhone 14 390px, etc.) ===== */
         @@media (max-width: 640px) {
             header {
@@ -125,8 +149,8 @@
             .brand { justify-content: center; font-size: 1rem; }
 
             .controls { margin-left: 0; width: 100%; gap: 8px; }
-            /* Cada control ocupa su propia fila / fila compartida */
-            #selLinea, .controls input[type="text"] {
+            /* El buscador ocupa todo el ancho */
+            .controls input[type="text"] {
                 flex: 1 1 100%;
                 width: 100%;
                 max-width: none;
@@ -158,10 +182,9 @@
     <header>
         <div class="brand"><span class="dot"></span>🚌 Bus en Vivo · Montevideo</div>
         <div class="controls">
-            <select id="selLinea" title="Elegí una línea del listado">
-                <option value="">— Elegí una línea —</option>
-            </select>
-            <input type="text" id="filtro" placeholder="o escribí: 155, ce1, terminal…" autocomplete="off" />
+            <input type="text" id="filtro" list="lineasList"
+                   placeholder="Línea o destino: 149 ADUANA, ce1, terminal…" autocomplete="off" />
+            <datalist id="lineasList"></datalist>
             <button id="btnBuscar">Seguir</button>
             <button id="btnTodos" class="ghost">Ver todos</button>
             <span class="stat">
@@ -194,21 +217,33 @@
         // --- Mapa ---
         const map = L.map('map', { zoomControl: true }).setView(CFG.centro, CFG.zoom);
 
-        // Capa base: cartografía oficial de Montevideo (GeoServer WMS de la IM)
+        // Capa base por DEFECTO: OpenStreetMap
+        const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19, attribution: '© OpenStreetMap'
+        }).addTo(map);
+
+        // Cartografía oficial de Montevideo (GeoServer WMS de la IM)
         const cartoMvd = L.tileLayer.wms(CFG.wmsUrl, {
             layers: CFG.wmsLayer,
             format: 'image/png',
             transparent: false,
             version: '1.3.0',
             attribution: 'Intendencia de Montevideo · STM'
-        }).addTo(map);
-
-        // Alternativa por si el WMS no carga
-        const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19, attribution: '© OpenStreetMap'
         });
+
+        // Satélite (Esri World Imagery)
+        const satelite = L.tileLayer(
+            'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+            { maxZoom: 19, attribution: 'Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics' }
+        );
+
+        // Selector de capas (arriba a la derecha)
         L.control.layers(
-            { 'Cartografía Montevideo': cartoMvd, 'OpenStreetMap': osm },
+            {
+                'OpenStreetMap': osm,
+                'Cartografía Montevideo': cartoMvd,
+                'Satélite': satelite
+            },
             null, { collapsed: true }
         ).addTo(map);
 
@@ -273,7 +308,7 @@
         // Si está en true, "Ver todos" fuerza traer todas las líneas aunque no haya filtro.
         let mostrarTodos = false;
 
-        // --- DataProvider de líneas (número + texto) que alimenta el <select> y la resolución ---
+        // --- DataProvider de líneas (número + texto): alimenta el autocompletado y la resolución ---
         let LINEAS = [];
 
         async function cargarLineas() {
@@ -282,57 +317,93 @@
                 const d = await r.json();
                 if (!d.ok) return;
                 LINEAS = d.lineas;
-                const sel = document.getElementById('selLinea');
+                // Llena el <datalist> -> autocompletado nativo (filtra por número y por texto)
+                const lista = document.getElementById('lineasList');
+                lista.innerHTML = '';
                 for (const l of LINEAS) {
                     const o = document.createElement('option');
-                    o.value = l.linea;
-                    o.textContent = l.texto ? `${l.linea} · ${l.texto}` : l.linea;
-                    sel.appendChild(o);
+                    o.value = l.texto ? `${l.linea} ${l.texto}` : l.linea;
+                    lista.appendChild(o);
                 }
             } catch { /* si falla, el filtro de texto igual funciona */ }
         }
 
-        // Resuelve un texto escrito (sin importar mayúsculas/minúsculas) a una línea real,
-        // eligiendo la coincidencia más cercana. Devuelve null si el texto está vacío.
-        function resolverLinea(token) {
-            const t = (token || '').trim().toUpperCase();
-            if (!t) return null;
-            // 1) número exacto  2) número que empieza igual  3) número contiene  4) texto contiene
-            let m = LINEAS.find(l => l.linea.toUpperCase() === t)
-                 || LINEAS.find(l => l.linea.toUpperCase().startsWith(t))
-                 || LINEAS.find(l => l.linea.toUpperCase().includes(t))
-                 || LINEAS.find(l => (l.texto || '').toUpperCase().includes(t));
-            return m ? m.linea : token.trim(); // sin match, se manda tal cual
+        // Normaliza: mayúsculas y sin acentos, para comparar sin importar tildes ni mayúsculas.
+        function normalizar(s) {
+            return (s || '').toString().normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
         }
 
-        function lineasResueltas(filtroRaw) {
-            return filtroRaw
-                .split(',')
-                .map(resolverLinea)
-                .filter(Boolean);
+        // Devuelve el código de línea si el token coincide EXACTO con una línea conocida; si no, null.
+        function esLineaExacta(token) {
+            const t = normalizar(token);
+            const m = LINEAS.find(l => normalizar(l.linea) === t);
+            return m ? m.linea : null;
+        }
+
+        // Separa lo escrito en: líneas (números/códigos) y texto libre (destino/sublínea).
+        // Ej: "149 ADUANA" -> { lineas:["149"], texto:"ADUANA" }
+        function parseConsulta(raw) {
+            const palabras = raw.split(/[\s,]+/).filter(Boolean);
+            const lineas = [];
+            const texto = [];
+            for (const p of palabras) {
+                const ln = esLineaExacta(p);
+                if (ln) { if (!lineas.includes(ln)) lineas.push(ln); }
+                else {
+                    const limpio = p.replace(/[^0-9a-záéíóúñ]/gi, ''); // descarta · - etc.
+                    if (limpio) texto.push(limpio);
+                }
+            }
+            return { lineas, texto: texto.join(' ').trim() };
+        }
+
+        // Filtra (visualmente) los buses dejando solo los de texto MÁS similar al buscado.
+        function filtrarPorTexto(buses, texto) {
+            const palabras = normalizar(texto).split(/\s+/).filter(Boolean);
+            if (!palabras.length) return buses;
+            const puntaje = (b) => {
+                const campo = normalizar([b.linea, b.sublinea, b.destino, b.tipoLinea].join(' '));
+                let s = 0;
+                for (const w of palabras) if (campo.includes(w)) s++;
+                return s;
+            };
+            const conPuntaje = buses.map(b => ({ b, s: puntaje(b) }));
+            const max = conPuntaje.reduce((m, x) => Math.max(m, x.s), 0);
+            if (max === 0) return [];                 // nada se parece al texto buscado
+            return conPuntaje.filter(x => x.s === max).map(x => x.b);  // solo los más similares
         }
 
         async function refrescar() {
-            const filtroRaw = document.getElementById('filtro').value.trim();
+            const raw = document.getElementById('filtro').value.trim();
 
-            // Por defecto no se trae ningún ómnibus hasta que el usuario filtre por línea.
-            if (!filtroRaw && !mostrarTodos) {
+            // Por defecto no se trae ningún ómnibus hasta que el usuario filtre.
+            if (!raw && !mostrarTodos) {
                 capaBuses.clearLayers();
                 document.getElementById('count').textContent = '0';
-                document.getElementById('reloj').textContent = 'elegí o escribí una línea para empezar';
+                document.getElementById('reloj').textContent = 'elegí o escribí una línea o destino';
                 errorBox.style.display = 'none';
                 return;
             }
 
-            const lineas = filtroRaw ? lineasResueltas(filtroRaw) : [];
-            const url = '/api/bus/posiciones' + (lineas.length ? '?lineas=' + encodeURIComponent(lineas.join(',')) : '');
+            const q = parseConsulta(raw);
+            // El API solo filtra por número de línea. Si hay líneas, pedimos esas;
+            // si solo hay texto, traemos todas y filtramos por texto del lado del cliente.
+            let url = '/api/bus/posiciones';
+            if (!mostrarTodos && q.lineas.length) {
+                url += '?lineas=' + encodeURIComponent(q.lineas.join(','));
+            }
+
             try {
                 const r = await fetch(url);
                 const data = await r.json();
                 if (!data.ok) throw new Error(data.error || 'Error desconocido');
 
+                // Filtrado visual por texto (destino/sublínea) si se especificó.
+                let buses = data.buses;
+                if (!mostrarTodos && q.texto) buses = filtrarPorTexto(buses, q.texto);
+
                 capaBuses.clearLayers();
-                for (const b of data.buses) {
+                for (const b of buses) {
                     L.marker([b.lat, b.lng], { icon: iconoBus(b.linea, b.sublinea, b.velocidad) })
                         .bindPopup(
                             `<b><span class="pill">${b.linea ?? '?'}</span></b>` +
@@ -343,8 +414,10 @@
                         )
                         .addTo(capaBuses);
                 }
-                document.getElementById('count').textContent = data.count;
-                document.getElementById('reloj').textContent = new Date().toLocaleTimeString('es-UY');
+                document.getElementById('count').textContent = buses.length;
+                document.getElementById('reloj').textContent = (q.texto && buses.length === 0)
+                    ? `sin coincidencias para «${q.texto}»`
+                    : new Date().toLocaleTimeString('es-UY');
                 errorBox.style.display = 'none';
             } catch (e) {
                 errorBox.textContent = '⚠ No se pudo obtener la posición de los ómnibus: ' + e.message;
@@ -353,27 +426,21 @@
         }
 
         // --- Eventos ---
+        const inputFiltro = document.getElementById('filtro');
         function buscar() { mostrarTodos = false; refrescar(); }
         document.getElementById('btnBuscar').addEventListener('click', buscar);
-        document.getElementById('filtro').addEventListener('keydown', e => { if (e.key === 'Enter') buscar(); });
-        document.getElementById('selLinea').addEventListener('change', e => {
-            const v = e.target.value;
-            if (!v) return;
-            document.getElementById('filtro').value = v;  // el select rellena el filtro de texto
-            mostrarTodos = false;
-            refrescar();
-        });
+        inputFiltro.addEventListener('keydown', e => { if (e.key === 'Enter') buscar(); });
+        // Al elegir una sugerencia del autocompletado, busca al instante.
+        inputFiltro.addEventListener('change', buscar);
         document.getElementById('btnTodos').addEventListener('click', () => {
-            document.getElementById('filtro').value = '';
-            document.getElementById('selLinea').value = '';
+            inputFiltro.value = '';
             mostrarTodos = true;   // acción explícita del usuario
             refrescar();
         });
 
-        // ¿Hay algo que actualizar? (línea válida en el filtro o "Ver todos")
+        // ¿Hay algo que actualizar? (cualquier consulta escrita o "Ver todos")
         function hayActividad() {
-            const f = document.getElementById('filtro').value.trim();
-            return mostrarTodos || (!!f && lineasResueltas(f).length > 0);
+            return mostrarTodos || inputFiltro.value.trim().length > 0;
         }
 
         // --- Contador circular: se llena en CFG.refresco y dispara la actualización ---
