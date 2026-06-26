@@ -6,6 +6,10 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+env:
+  FTP_HOST: MiBusCorbo.somee.com
+  FTP_DIR: /www.MiBusCorbo.somee.com/
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -26,6 +30,20 @@ jobs:
           -p:PublishSingleFile=false -p:PublishTrimmed=false
           -o deploy
 
+      - name: Habilitar log de stdout (diagnóstico)
+        run: |
+          sed -i 's/stdoutLogEnabled="false"/stdoutLogEnabled="true"/' deploy/web.config
+          mkdir -p deploy/logs
+
+      - name: Poner app_offline (apaga la app y libera los locks de IIS)
+        run: |
+          echo '<html><body><h2>Actualizando la app...</h2></body></html>' > app_offline.htm
+          curl -sS --ftp-create-dirs -T app_offline.htm \
+            --user "${{ secrets.SOMEE_FTP_USERNAME }}:${{ secrets.SOMEE_FTP_PASSWORD }}" \
+            "ftp://${FTP_HOST}${FTP_DIR}app_offline.htm"
+          echo "app_offline subido; esperando a que IIS suelte los archivos..."
+          sleep 10
+
       - name: Subir por FTP a somee
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
@@ -36,3 +54,9 @@ jobs:
           port: 21
           local-dir: ./deploy/
           server-dir: /www.MiBusCorbo.somee.com/
+
+      - name: Quitar app_offline (vuelve a arrancar la app)
+        if: always()
+        run: |
+          curl -sS --user "${{ secrets.SOMEE_FTP_USERNAME }}:${{ secrets.SOMEE_FTP_PASSWORD }}" \
+            "ftp://${FTP_HOST}/" -Q "DELE ${FTP_DIR}app_offline.htm" || true
