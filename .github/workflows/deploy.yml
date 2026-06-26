@@ -1,0 +1,38 @@
+name: Deploy a somee (FTP)
+
+# Se ejecuta en cada push a main, o manualmente desde la pestaña Actions.
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Instalar .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          dotnet-quality: 'preview'
+
+      - name: Publicar (self-contained, multi-archivo para IIS)
+        run: >
+          dotnet publish -c Release
+          -r win-x86 --self-contained true
+          -p:PublishSingleFile=false -p:PublishTrimmed=false
+          -o deploy
+
+      - name: Subir por FTP a somee
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: MiBusCorbo.somee.com
+          username: ${{ secrets.SOMEE_FTP_USERNAME }}
+          password: ${{ secrets.SOMEE_FTP_PASSWORD }}
+          protocol: ftp
+          port: 21
+          local-dir: ./deploy/
+          server-dir: /www.MiBusCorbo.somee.com/

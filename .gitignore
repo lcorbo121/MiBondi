@@ -3,6 +3,11 @@ bin/
 obj/
 out/
 
+# Carpetas de publicación / deploy
+publish/
+dist/
+deploy/
+
 # Cachés y archivos de usuario de Visual Studio / Rider
 .vs/
 .vscode/

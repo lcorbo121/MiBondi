@@ -1,9 +1,19 @@
 using BusEnVivo.Services;
+using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddControllersWithViews();
+
+// Detrás del proxy/IIS de somee, respeta el esquema real (X-Forwarded-Proto)
+// para que la app sepa cuándo la petición vino por HTTPS y redirija bien.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
 // HttpClient tipado para consumir la API de la STM en tiempo real.
 builder.Services.AddHttpClient<IStmService, StmService>(c =>
@@ -14,6 +24,9 @@ builder.Services.AddHttpClient<IStmService, StmService>(c =>
 
 var app = builder.Build();
 
+// Aplica el esquema reenviado por el proxy antes de cualquier decisión de redirección.
+app.UseForwardedHeaders();
+
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
@@ -22,6 +35,7 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
+// Redirige HTTP -> HTTPS (con el certificado que agregaste en somee).
 app.UseHttpsRedirection();
 app.UseRouting();
 
