@@ -33,6 +33,21 @@ posición de los ómnibus del Sistema de Transporte Metropolitano (STM) de Monte
 - 🧹 **Sin publicidad**: oculta el banner/branding que somee inyecta en el plan gratuito.
 - 🚀 **Deploy automático** a somee por FTP en cada push a `main` (GitHub Actions).
 
+## 📸 Capturas
+
+Mapa con el **recorrido y el sentido (ida/vuelta)** de cada bus, coloreados por destino, con la
+leyenda y las paradas:
+
+![Mapa con recorridos por sentido](docs/mapa-recorrido.png)
+
+<p>
+  <img src="docs/autocompletado.png" alt="Buscador con autocompletado" width="320" />&nbsp;
+  <img src="docs/movil.png" alt="Vista en celular (iPhone)" width="300" />
+</p>
+
+> Izquierda: **buscador con autocompletado** (desplegable al escribir). Derecha: **vista móvil**
+> responsive con buses, recorrido y badge de velocidad (`KM/H`).
+
 ## 🚀 Cómo correrlo
 
 Requisitos: [.NET SDK 10](https://dotnet.microsoft.com/download).

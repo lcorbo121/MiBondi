@@ -336,11 +336,13 @@
             // Badge circular con la velocidad, por fuera y ARRIBA del círculo del bus.
             const vel = Number.isFinite(velocidad) ? velocidad : 0;
             const colorVel = vel <= 5 ? '#e5484d' : (vel <= 20 ? '#f5a623' : '#2ecc71'); // detenido / lento / rápido
-            const badgeVel = `<div title="${vel} km/h" style="position:absolute;top:-11px;left:50%;
-                        transform:translateX(-50%);min-width:20px;height:20px;padding:0 3px;border-radius:50%;
+            const badgeVel = `<div title="${vel} km/h" style="position:absolute;top:-15px;left:50%;
+                        transform:translateX(-50%);min-width:22px;padding:1px 4px;border-radius:9px;
                         background:${colorVel};color:#fff;border:2px solid #fff;box-sizing:border-box;
-                        display:flex;align-items:center;justify-content:center;
-                        font:700 10px system-ui;box-shadow:0 1px 3px rgba(0,0,0,.5)">${vel}</div>`;
+                        display:flex;flex-direction:column;align-items:center;line-height:1;
+                        box-shadow:0 1px 3px rgba(0,0,0,.5)">
+                        <span style="font:800 10px system-ui">${vel}</span>
+                        <span style="font:700 6px system-ui;letter-spacing:.4px;opacity:.9;margin-top:1px">KM/H</span></div>`;
 
             const circulo = `<div style="position:relative;flex:0 0 auto">${badgeVel}` +
                         `<div style="background:${colorBus};color:#fff;border:2px solid #fff;
