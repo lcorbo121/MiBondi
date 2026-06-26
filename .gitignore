@@ -1,0 +1,19 @@
+# Compilados / salida de .NET
+bin/
+obj/
+out/
+
+# Cachés y archivos de usuario de Visual Studio / Rider
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# Variables/Secrets locales
+appsettings.*.local.json
+secrets.json
+
+# Logs y temporales
+*.log
+*.tmp

@@ -1,0 +1,356 @@
+@using Microsoft.Extensions.Configuration
+@inject IConfiguration Config
+@{
+    Layout = null;
+    var wmsUrl = Config["Mapa:WmsUrl"];
+    var wmsLayer = Config["Mapa:WmsLayer"];
+    var centroLat = Config["Mapa:CentroLat"];
+    var centroLng = Config["Mapa:CentroLng"];
+    var zoom = Config["Mapa:Zoom"];
+    var refresco = Config["Mapa:RefrescoSegundos"];
+}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bus en Vivo · Montevideo</title>
+
+    <link rel="stylesheet"
+          href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+          crossorigin="" />
+    <style>
+        :root {
+            --bg: #0e1117;
+            --panel: #161b22;
+            --line: #232a34;
+            --txt: #e6edf3;
+            --muted: #8b949e;
+            --accent: #ffb000;
+            --accent-2: #1f6feb;
+        }
+        * { box-sizing: border-box; }
+        html, body { height: 100%; margin: 0; }
+        body {
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--txt);
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 12px 18px;
+            background: var(--panel);
+            border-bottom: 1px solid var(--line);
+            z-index: 1000;
+            flex-wrap: wrap;
+        }
+        .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.05rem; }
+        .brand .dot {
+            width: 10px; height: 10px; border-radius: 50%;
+            background: #2ecc71; box-shadow: 0 0 0 0 rgba(46,204,113,.7);
+            animation: pulse 1.8s infinite;
+        }
+        @@keyframes pulse {
+            0%   { box-shadow: 0 0 0 0 rgba(46,204,113,.6); }
+            70%  { box-shadow: 0 0 0 8px rgba(46,204,113,0); }
+            100% { box-shadow: 0 0 0 0 rgba(46,204,113,0); }
+        }
+
+        .controls { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-wrap: wrap; }
+        input[type="text"] {
+            background: #0d1117; color: var(--txt);
+            border: 1px solid var(--line); border-radius: 8px;
+            padding: 8px 12px; font-size: .9rem; width: 200px; outline: none;
+        }
+        input[type="text"]:focus { border-color: var(--accent-2); }
+        select {
+            background: #0d1117; color: var(--txt);
+            border: 1px solid var(--line); border-radius: 8px;
+            padding: 8px 12px; font-size: .9rem; max-width: 260px; outline: none; cursor: pointer;
+        }
+        select:focus { border-color: var(--accent-2); }
+        button {
+            background: var(--accent); color: #1a1100; border: 0;
+            border-radius: 8px; padding: 8px 14px; font-weight: 600;
+            cursor: pointer; font-size: .9rem;
+        }
+        button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+        button:hover { filter: brightness(1.08); }
+
+        .stat { font-size: .85rem; color: var(--muted); white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+        .stat b { color: var(--accent); font-variant-numeric: tabular-nums; }
+
+        /* Contador circular estilo reloj: se llena hasta la próxima actualización */
+        .contador svg { display: block; transform: rotate(-90deg); }
+        .ring-track { fill: none; stroke: var(--line); stroke-width: 3; }
+        .ring-prog {
+            fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round;
+            transition: stroke-dashoffset .08s linear;
+        }
+
+        #map { flex: 1; }
+        .leaflet-popup-content { font-size: .88rem; line-height: 1.5; }
+        .pill {
+            display: inline-block; background: var(--accent-2); color: #fff;
+            border-radius: 6px; padding: 1px 8px; font-weight: 700; margin-right: 4px;
+        }
+        #error {
+            display: none; background: #4d1f1f; color: #ffd7d7;
+            padding: 6px 18px; font-size: .85rem; border-bottom: 1px solid #6b2b2b;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="brand"><span class="dot"></span>🚌 Bus en Vivo · Montevideo</div>
+        <div class="controls">
+            <select id="selLinea" title="Elegí una línea del listado">
+                <option value="">— Elegí una línea —</option>
+            </select>
+            <input type="text" id="filtro" placeholder="o escribí: 155, ce1, terminal…" autocomplete="off" />
+            <button id="btnBuscar">Seguir</button>
+            <button id="btnTodos" class="ghost">Ver todos</button>
+            <span class="stat">
+                <span class="contador" id="contador" title="Próxima actualización">
+                    <svg width="26" height="26" viewBox="0 0 26 26">
+                        <circle class="ring-track" cx="13" cy="13" r="9"></circle>
+                        <circle class="ring-prog" id="ringProg" cx="13" cy="13" r="9"></circle>
+                    </svg>
+                </span>
+                <b id="count">0</b> ómnibus · cada <b>@refresco</b>s · <span id="reloj">—</span>
+            </span>
+        </div>
+    </header>
+    <div id="error"></div>
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+            crossorigin=""></script>
+    <script>
+        // --- Configuración inyectada desde appsettings.json ---
+        const CFG = {
+            wmsUrl:   "@wmsUrl",
+            wmsLayer: "@wmsLayer",
+            centro:   [@centroLat, @centroLng],
+            zoom:     @zoom,
+            refresco: @refresco * 1000
+        };
+
+        // --- Mapa ---
+        const map = L.map('map', { zoomControl: true }).setView(CFG.centro, CFG.zoom);
+
+        // Capa base: cartografía oficial de Montevideo (GeoServer WMS de la IM)
+        const cartoMvd = L.tileLayer.wms(CFG.wmsUrl, {
+            layers: CFG.wmsLayer,
+            format: 'image/png',
+            transparent: false,
+            version: '1.3.0',
+            attribution: 'Intendencia de Montevideo · STM'
+        }).addTo(map);
+
+        // Alternativa por si el WMS no carga
+        const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19, attribution: '© OpenStreetMap'
+        });
+        L.control.layers(
+            { 'Cartografía Montevideo': cartoMvd, 'OpenStreetMap': osm },
+            null, { collapsed: true }
+        ).addTo(map);
+
+        // --- Fix de redimensionado ---
+        // Leaflet calcula su tamaño una sola vez; si el contenedor cambia (resize de ventana,
+        // header que se reacomoda, etc.) los tiles quedan grises/desalineados. invalidateSize()
+        // le avisa del nuevo tamaño. Se llama con debounce ante cualquier cambio.
+        let resizeRaf = null;
+        function ajustarMapa() {
+            if (resizeRaf) cancelAnimationFrame(resizeRaf);
+            resizeRaf = requestAnimationFrame(() => map.invalidateSize({ animate: false }));
+        }
+        window.addEventListener('resize', ajustarMapa);
+        window.addEventListener('orientationchange', ajustarMapa);
+        if (window.ResizeObserver) {
+            new ResizeObserver(ajustarMapa).observe(document.getElementById('map'));
+        }
+        // Reajuste tras el primer render (cuando el layout ya se asentó).
+        map.whenReady(() => setTimeout(ajustarMapa, 150));
+
+        // --- Marcadores ---
+        const capaBuses = L.layerGroup().addTo(map);
+        const errorBox = document.getElementById('error');
+
+        function escapeHtml(s) {
+            return (s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+        }
+
+        function iconoBus(linea, sublinea, velocidad) {
+            const numero = linea || '?';
+            // Ajusta el ancho del círculo según la cantidad de caracteres (ej. "155" vs "CE1").
+            const ancho = Math.max(30, 16 + numero.length * 8);
+
+            // Badge circular con la velocidad, por fuera y ARRIBA del círculo del bus.
+            const vel = Number.isFinite(velocidad) ? velocidad : 0;
+            const colorVel = vel <= 5 ? '#e5484d' : (vel <= 20 ? '#f5a623' : '#2ecc71'); // detenido / lento / rápido
+            const badgeVel = `<div title="${vel} km/h" style="position:absolute;top:-11px;left:50%;
+                        transform:translateX(-50%);min-width:20px;height:20px;padding:0 3px;border-radius:50%;
+                        background:${colorVel};color:#fff;border:2px solid #fff;box-sizing:border-box;
+                        display:flex;align-items:center;justify-content:center;
+                        font:700 10px system-ui;box-shadow:0 1px 3px rgba(0,0,0,.5)">${vel}</div>`;
+
+            const circulo = `<div style="position:relative;flex:0 0 auto">${badgeVel}` +
+                        `<div style="background:#1f6feb;color:#fff;border:2px solid #fff;
+                        width:${ancho}px;height:30px;border-radius:50%;
+                        display:flex;align-items:center;justify-content:center;
+                        font:700 12px system-ui;box-shadow:0 1px 5px rgba(0,0,0,.55)">${escapeHtml(numero)}</div></div>`;
+            // Etiqueta con el texto de la línea, por FUERA del círculo.
+            const etiqueta = sublinea
+                ? `<div style="background:rgba(255,255,255,.9);color:#111;border:1px solid rgba(0,0,0,.15);
+                        border-radius:6px;padding:2px 6px;font:600 11px system-ui;white-space:nowrap;
+                        box-shadow:0 1px 4px rgba(0,0,0,.35)">${escapeHtml(sublinea)}</div>`
+                : '';
+            return L.divIcon({
+                className: '',
+                html: `<div style="display:flex;align-items:center;gap:4px">${circulo}${etiqueta}</div>`,
+                iconSize: [ancho, 30],
+                iconAnchor: [ancho / 2, 15]  // el punto queda en el centro del círculo; la etiqueta sobresale a la derecha
+            });
+        }
+
+        // Si está en true, "Ver todos" fuerza traer todas las líneas aunque no haya filtro.
+        let mostrarTodos = false;
+
+        // --- DataProvider de líneas (número + texto) que alimenta el <select> y la resolución ---
+        let LINEAS = [];
+
+        async function cargarLineas() {
+            try {
+                const r = await fetch('/api/bus/lineas');
+                const d = await r.json();
+                if (!d.ok) return;
+                LINEAS = d.lineas;
+                const sel = document.getElementById('selLinea');
+                for (const l of LINEAS) {
+                    const o = document.createElement('option');
+                    o.value = l.linea;
+                    o.textContent = l.texto ? `${l.linea} · ${l.texto}` : l.linea;
+                    sel.appendChild(o);
+                }
+            } catch { /* si falla, el filtro de texto igual funciona */ }
+        }
+
+        // Resuelve un texto escrito (sin importar mayúsculas/minúsculas) a una línea real,
+        // eligiendo la coincidencia más cercana. Devuelve null si el texto está vacío.
+        function resolverLinea(token) {
+            const t = (token || '').trim().toUpperCase();
+            if (!t) return null;
+            // 1) número exacto  2) número que empieza igual  3) número contiene  4) texto contiene
+            let m = LINEAS.find(l => l.linea.toUpperCase() === t)
+                 || LINEAS.find(l => l.linea.toUpperCase().startsWith(t))
+                 || LINEAS.find(l => l.linea.toUpperCase().includes(t))
+                 || LINEAS.find(l => (l.texto || '').toUpperCase().includes(t));
+            return m ? m.linea : token.trim(); // sin match, se manda tal cual
+        }
+
+        function lineasResueltas(filtroRaw) {
+            return filtroRaw
+                .split(',')
+                .map(resolverLinea)
+                .filter(Boolean);
+        }
+
+        async function refrescar() {
+            const filtroRaw = document.getElementById('filtro').value.trim();
+
+            // Por defecto no se trae ningún ómnibus hasta que el usuario filtre por línea.
+            if (!filtroRaw && !mostrarTodos) {
+                capaBuses.clearLayers();
+                document.getElementById('count').textContent = '0';
+                document.getElementById('reloj').textContent = 'elegí o escribí una línea para empezar';
+                errorBox.style.display = 'none';
+                return;
+            }
+
+            const lineas = filtroRaw ? lineasResueltas(filtroRaw) : [];
+            const url = '/api/bus/posiciones' + (lineas.length ? '?lineas=' + encodeURIComponent(lineas.join(',')) : '');
+            try {
+                const r = await fetch(url);
+                const data = await r.json();
+                if (!data.ok) throw new Error(data.error || 'Error desconocido');
+
+                capaBuses.clearLayers();
+                for (const b of data.buses) {
+                    L.marker([b.lat, b.lng], { icon: iconoBus(b.linea, b.sublinea, b.velocidad) })
+                        .bindPopup(
+                            `<b><span class="pill">${b.linea ?? '?'}</span></b>` +
+                            `${b.sublinea ?? ''}<br>` +
+                            `🏁 <b>Destino:</b> ${b.destino ?? '—'}<br>` +
+                            `⚡ <b>Velocidad:</b> ${b.velocidad} km/h<br>` +
+                            `🚍 <b>Coche:</b> ${b.codigoBus} (empresa ${b.empresa})`
+                        )
+                        .addTo(capaBuses);
+                }
+                document.getElementById('count').textContent = data.count;
+                document.getElementById('reloj').textContent = new Date().toLocaleTimeString('es-UY');
+                errorBox.style.display = 'none';
+            } catch (e) {
+                errorBox.textContent = '⚠ No se pudo obtener la posición de los ómnibus: ' + e.message;
+                errorBox.style.display = 'block';
+            }
+        }
+
+        // --- Eventos ---
+        function buscar() { mostrarTodos = false; refrescar(); }
+        document.getElementById('btnBuscar').addEventListener('click', buscar);
+        document.getElementById('filtro').addEventListener('keydown', e => { if (e.key === 'Enter') buscar(); });
+        document.getElementById('selLinea').addEventListener('change', e => {
+            const v = e.target.value;
+            if (!v) return;
+            document.getElementById('filtro').value = v;  // el select rellena el filtro de texto
+            mostrarTodos = false;
+            refrescar();
+        });
+        document.getElementById('btnTodos').addEventListener('click', () => {
+            document.getElementById('filtro').value = '';
+            document.getElementById('selLinea').value = '';
+            mostrarTodos = true;   // acción explícita del usuario
+            refrescar();
+        });
+
+        // ¿Hay algo que actualizar? (línea válida en el filtro o "Ver todos")
+        function hayActividad() {
+            const f = document.getElementById('filtro').value.trim();
+            return mostrarTodos || (!!f && lineasResueltas(f).length > 0);
+        }
+
+        // --- Contador circular: se llena en CFG.refresco y dispara la actualización ---
+        const ringProg = document.getElementById('ringProg');
+        const CIRC = 2 * Math.PI * 9;                 // circunferencia (r = 9)
+        ringProg.style.strokeDasharray = CIRC;
+        ringProg.style.strokeDashoffset = CIRC;       // arranca vacío
+
+        let inicioCiclo = performance.now();
+        function tick(now) {
+            if (hayActividad()) {
+                const frac = Math.min((now - inicioCiclo) / CFG.refresco, 1);
+                ringProg.style.strokeDashoffset = CIRC * (1 - frac);  // se va llenando
+                if (frac >= 1) { inicioCiclo = now; refrescar(); }     // lleno -> actualiza
+            } else {
+                ringProg.style.strokeDashoffset = CIRC;               // inactivo: vacío
+                inicioCiclo = now;
+            }
+            requestAnimationFrame(tick);
+        }
+
+        // Carga el DataProvider del select; arranca vacío hasta que se filtre.
+        cargarLineas();
+        refrescar();
+        requestAnimationFrame(tick);
+    </script>
+</body>
+</html>
