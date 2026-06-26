@@ -94,6 +94,25 @@
             padding: 8px 12px; font-size: .9rem; width: 200px; outline: none;
         }
         input[type="text"]:focus { border-color: var(--accent-2); }
+
+        /* Combobox: input + desplegable de sugerencias */
+        .buscador { position: relative; }
+        .sugerencias {
+            position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+            background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+            max-height: 280px; overflow-y: auto; z-index: 2000; display: none;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, .55);
+        }
+        .sugerencias.abierto { display: block; }
+        .sug-item {
+            padding: 8px 12px; cursor: pointer; font-size: .9rem;
+            border-bottom: 1px solid rgba(255, 255, 255, .05);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .sug-item:last-child { border-bottom: 0; }
+        .sug-item:hover, .sug-item.activo { background: var(--accent-2); color: #fff; }
+        .sug-item .num { color: var(--accent); font-weight: 700; margin-right: 8px; }
+        .sug-item:hover .num, .sug-item.activo .num { color: #fff; }
         select {
             background: #0d1117; color: var(--txt);
             border: 1px solid var(--line); border-radius: 8px;
@@ -120,6 +139,18 @@
         }
 
         #map { flex: 1; }
+        /* Leyenda de sentidos (ida/vuelta) sobre el mapa */
+        .leyenda {
+            position: absolute; left: 10px; bottom: 22px; z-index: 1200;
+            background: rgba(22, 27, 34, .92); color: var(--txt);
+            border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+            font-size: .8rem; max-width: 70vw; display: none;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, .5);
+        }
+        .leyenda.visible { display: block; }
+        .leyenda h4 { margin: 0 0 5px; font-size: .72rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+        .ley-item { display: flex; align-items: center; gap: 7px; padding: 2px 0; white-space: nowrap; }
+        .ley-sw { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid #fff; flex: 0 0 auto; }
         .leaflet-popup-content { font-size: .88rem; line-height: 1.5; }
         .pill {
             display: inline-block; background: var(--accent-2); color: #fff;
@@ -150,8 +181,8 @@
 
             .controls { margin-left: 0; width: 100%; gap: 8px; }
             /* El buscador ocupa todo el ancho */
+            .buscador { flex: 1 1 100%; width: 100%; }
             .controls input[type="text"] {
-                flex: 1 1 100%;
                 width: 100%;
                 max-width: none;
                 font-size: 16px;        /* >=16px evita el zoom automático de iOS al enfocar */
@@ -182,9 +213,11 @@
     <header>
         <div class="brand"><span class="dot"></span>🚌 Bus en Vivo · Montevideo</div>
         <div class="controls">
-            <input type="text" id="filtro" list="lineasList"
-                   placeholder="Línea o destino: 149 ADUANA, ce1, terminal…" autocomplete="off" />
-            <datalist id="lineasList"></datalist>
+            <div class="buscador">
+                <input type="text" id="filtro" placeholder="Línea o destino: 149 ADUANA…"
+                       autocomplete="off" role="combobox" aria-expanded="false" aria-autocomplete="list" />
+                <div id="sugerencias" class="sugerencias"></div>
+            </div>
             <button id="btnBuscar">Seguir</button>
             <button id="btnTodos" class="ghost">Ver todos</button>
             <span class="stat">
@@ -200,6 +233,7 @@
     </header>
     <div id="error"></div>
     <div id="map"></div>
+    <div id="leyenda" class="leyenda"></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
             integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
@@ -276,10 +310,11 @@
             return (s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
         }
 
-        function iconoBus(linea, sublinea, velocidad) {
+        function iconoBus(linea, destino, velocidad, color) {
             const numero = linea || '?';
             // Ajusta el ancho del círculo según la cantidad de caracteres (ej. "155" vs "CE1").
             const ancho = Math.max(30, 16 + numero.length * 8);
+            const colorBus = color || '#1f6feb';
 
             // Badge circular con la velocidad, por fuera y ARRIBA del círculo del bus.
             const vel = Number.isFinite(velocidad) ? velocidad : 0;
@@ -291,15 +326,15 @@
                         font:700 10px system-ui;box-shadow:0 1px 3px rgba(0,0,0,.5)">${vel}</div>`;
 
             const circulo = `<div style="position:relative;flex:0 0 auto">${badgeVel}` +
-                        `<div style="background:#1f6feb;color:#fff;border:2px solid #fff;
+                        `<div style="background:${colorBus};color:#fff;border:2px solid #fff;
                         width:${ancho}px;height:30px;border-radius:50%;
                         display:flex;align-items:center;justify-content:center;
                         font:700 12px system-ui;box-shadow:0 1px 5px rgba(0,0,0,.55)">${escapeHtml(numero)}</div></div>`;
-            // Etiqueta con el texto de la línea, por FUERA del círculo.
-            const etiqueta = sublinea
-                ? `<div style="background:rgba(255,255,255,.9);color:#111;border:1px solid rgba(0,0,0,.15);
-                        border-radius:6px;padding:2px 6px;font:600 11px system-ui;white-space:nowrap;
-                        box-shadow:0 1px 4px rgba(0,0,0,.35)">${escapeHtml(sublinea)}</div>`
+            // Etiqueta con el SENTIDO (hacia dónde va el bus), por FUERA del círculo.
+            const etiqueta = destino
+                ? `<div style="background:rgba(255,255,255,.92);color:#111;border-left:4px solid ${colorBus};
+                        border-radius:6px;padding:2px 7px;font:600 11px system-ui;white-space:nowrap;
+                        box-shadow:0 1px 4px rgba(0,0,0,.35)">→ ${escapeHtml(destino)}</div>`
                 : '';
             return L.divIcon({
                 className: '',
@@ -312,6 +347,29 @@
         // Si está en true, "Ver todos" fuerza traer todas las líneas aunque no haya filtro.
         let mostrarTodos = false;
 
+        // --- Colores por SENTIDO (ida / vuelta): cada destino distinto recibe un color ---
+        const PALETA = ['#1f6feb', '#8957e5', '#e5484d', '#16a3a3', '#f5a623', '#d6409f', '#2ecc71', '#0aa'];
+        let mapaColores = {};   // destino -> color
+
+        function asignarColores(destinos) {
+            // Orden alfabético -> asignación estable (no cambia el color entre refrescos).
+            const distintos = [...new Set(destinos.filter(Boolean))].sort();
+            mapaColores = {};
+            distintos.forEach((d, i) => { mapaColores[d] = PALETA[i % PALETA.length]; });
+        }
+        const colorDestino = (d) => mapaColores[d] || '#1f6feb';
+
+        // Dibuja/oculta la leyenda de sentidos (cada destino con su color).
+        function actualizarLeyenda(mostrar) {
+            const box = document.getElementById('leyenda');
+            const destinos = Object.keys(mapaColores);
+            if (!mostrar || destinos.length === 0) { box.classList.remove('visible'); box.innerHTML = ''; return; }
+            box.innerHTML = '<h4>Sentido</h4>' + destinos.map(d =>
+                `<div class="ley-item"><span class="ley-sw" style="background:${mapaColores[d]}"></span>→ ${escapeHtml(d)}</div>`
+            ).join('');
+            box.classList.add('visible');
+        }
+
         // --- DataProvider de líneas (número + texto): alimenta el autocompletado y la resolución ---
         let LINEAS = [];
 
@@ -319,16 +377,7 @@
             try {
                 const r = await fetch('/api/bus/lineas');
                 const d = await r.json();
-                if (!d.ok) return;
-                LINEAS = d.lineas;
-                // Llena el <datalist> -> autocompletado nativo (filtra por número y por texto)
-                const lista = document.getElementById('lineasList');
-                lista.innerHTML = '';
-                for (const l of LINEAS) {
-                    const o = document.createElement('option');
-                    o.value = l.texto ? `${l.linea} ${l.texto}` : l.linea;
-                    lista.appendChild(o);
-                }
+                if (d.ok) LINEAS = d.lineas;   // alimenta el autocompletado (combobox)
             } catch { /* si falla, el filtro de texto igual funciona */ }
         }
 
@@ -407,6 +456,7 @@
             if (!raw && !mostrarTodos) {
                 capaBuses.clearLayers();
                 actualizarParadas([]);
+                mapaColores = {}; actualizarLeyenda(false);
                 document.getElementById('count').textContent = '0';
                 document.getElementById('reloj').textContent = 'elegí o escribí una línea o destino';
                 errorBox.style.display = 'none';
@@ -433,18 +483,25 @@
                 let buses = data.buses;
                 if (!mostrarTodos && q.texto) buses = filtrarPorTexto(buses, q.texto);
 
+                // Sentido (ida/vuelta): coloreamos por destino cuando hay línea(s) concreta(s).
+                const colorearSentido = !mostrarTodos && q.lineas.length > 0;
+                if (colorearSentido) asignarColores(buses.map(b => b.destino));
+                else mapaColores = {};
+
                 capaBuses.clearLayers();
                 for (const b of buses) {
-                    L.marker([b.lat, b.lng], { icon: iconoBus(b.linea, b.sublinea, b.velocidad) })
+                    const color = colorearSentido ? colorDestino(b.destino) : '#1f6feb';
+                    L.marker([b.lat, b.lng], { icon: iconoBus(b.linea, b.destino, b.velocidad, color) })
                         .bindPopup(
-                            `<b><span class="pill">${b.linea ?? '?'}</span></b>` +
+                            `<b><span class="pill" style="background:${color}">${b.linea ?? '?'}</span></b>` +
                             `${b.sublinea ?? ''}<br>` +
-                            `🏁 <b>Destino:</b> ${b.destino ?? '—'}<br>` +
+                            `🧭 <b>Sentido →</b> ${b.destino ?? '—'}<br>` +
                             `⚡ <b>Velocidad:</b> ${b.velocidad} km/h<br>` +
                             `🚍 <b>Coche:</b> ${b.codigoBus} (empresa ${b.empresa})`
                         )
                         .addTo(capaBuses);
                 }
+                actualizarLeyenda(colorearSentido);
                 document.getElementById('count').textContent = buses.length;
                 document.getElementById('reloj').textContent = (q.texto && buses.length === 0)
                     ? `sin coincidencias para «${q.texto}»`
@@ -458,16 +515,90 @@
 
         // --- Eventos ---
         const inputFiltro = document.getElementById('filtro');
-        function buscar() { mostrarTodos = false; refrescar(); }
+        function buscar() { cerrarSug(); mostrarTodos = false; refrescar(); }
         document.getElementById('btnBuscar').addEventListener('click', buscar);
-        inputFiltro.addEventListener('keydown', e => { if (e.key === 'Enter') buscar(); });
-        // Al elegir una sugerencia del autocompletado, busca al instante.
-        inputFiltro.addEventListener('change', buscar);
         document.getElementById('btnTodos').addEventListener('click', () => {
             inputFiltro.value = '';
+            cerrarSug();
             mostrarTodos = true;   // acción explícita del usuario
             refrescar();
         });
+
+        // ---- Autocompletado tipo combobox (desplegable bajo el input) ----
+        const cajaSug = document.getElementById('sugerencias');
+        let sugItems = [];      // líneas mostradas ahora
+        let sugActivo = -1;     // índice resaltado (teclado)
+
+        // Devuelve el "término" que se está escribiendo (después de la última coma).
+        function terminoActual() {
+            const partes = inputFiltro.value.split(',');
+            return partes[partes.length - 1].trim();
+        }
+
+        function mostrarSugerencias() {
+            const term = normalizar(terminoActual());
+            if (!term) { cerrarSug(); return; }
+            const res = LINEAS.filter(l =>
+                normalizar(l.linea).includes(term) || normalizar(l.texto).includes(term));
+            // Primero las líneas cuyo número empieza con lo tipeado.
+            res.sort((a, b) =>
+                (normalizar(a.linea).startsWith(term) ? 0 : 1) -
+                (normalizar(b.linea).startsWith(term) ? 0 : 1));
+            sugItems = res.slice(0, 40);
+            sugActivo = -1;
+            if (!sugItems.length) { cerrarSug(); return; }
+            cajaSug.innerHTML = sugItems.map((l, i) =>
+                `<div class="sug-item" data-i="${i}"><span class="num">${escapeHtml(l.linea)}</span>${escapeHtml(l.texto || '')}</div>`
+            ).join('');
+            cajaSug.classList.add('abierto');
+            inputFiltro.setAttribute('aria-expanded', 'true');
+        }
+
+        function cerrarSug() {
+            cajaSug.classList.remove('abierto');
+            cajaSug.innerHTML = '';
+            sugItems = []; sugActivo = -1;
+            inputFiltro.setAttribute('aria-expanded', 'false');
+        }
+
+        function resaltar(i) {
+            sugActivo = i;
+            [...cajaSug.children].forEach((el, idx) => el.classList.toggle('activo', idx === i));
+            const el = cajaSug.children[i];
+            if (el) el.scrollIntoView({ block: 'nearest' });
+        }
+
+        function elegirSug(i) {
+            const l = sugItems[i];
+            if (!l) return;
+            // Reemplaza el último término (respeta lo que haya antes de la coma).
+            const partes = inputFiltro.value.split(',');
+            partes[partes.length - 1] = (partes.length > 1 ? ' ' : '') +
+                (l.texto ? `${l.linea} ${l.texto}` : l.linea);
+            inputFiltro.value = partes.join(',');
+            buscar();
+            inputFiltro.focus();
+        }
+
+        inputFiltro.addEventListener('input', mostrarSugerencias);
+        inputFiltro.addEventListener('focus', () => { if (terminoActual()) mostrarSugerencias(); });
+        inputFiltro.addEventListener('keydown', (e) => {
+            const abierto = cajaSug.classList.contains('abierto');
+            if (e.key === 'ArrowDown' && abierto) { e.preventDefault(); resaltar(Math.min(sugActivo + 1, sugItems.length - 1)); }
+            else if (e.key === 'ArrowUp' && abierto) { e.preventDefault(); resaltar(Math.max(sugActivo - 1, 0)); }
+            else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (abierto && sugActivo >= 0) elegirSug(sugActivo);
+                else buscar();
+            }
+            else if (e.key === 'Escape') { cerrarSug(); }
+        });
+        // mousedown (no click) para que se ejecute antes del blur del input.
+        cajaSug.addEventListener('mousedown', (e) => {
+            const item = e.target.closest('.sug-item');
+            if (item) { e.preventDefault(); elegirSug(+item.dataset.i); }
+        });
+        inputFiltro.addEventListener('blur', () => setTimeout(cerrarSug, 150));
 
         // ¿Hay algo que actualizar? (cualquier consulta escrita o "Ver todos")
         function hayActividad() {
