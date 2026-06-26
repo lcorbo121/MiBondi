@@ -22,12 +22,56 @@ public class Bus
 
 /// <summary>
 /// Ítem del DataProvider de líneas: número de línea + su texto (sublínea).
-/// Alimenta el &lt;select&gt; del filtro.
+/// Alimenta el autocompletado del filtro.
 /// </summary>
 public class LineaInfo
 {
     public string Linea { get; set; } = "";
     public string Texto { get; set; } = "";
+}
+
+/// <summary>
+/// Parada de ómnibus por la que pasa una línea (capa de paradas del mapa).
+/// </summary>
+public class Parada
+{
+    public int Cod { get; set; }
+    public string? Linea { get; set; }
+    public string? Calle { get; set; }
+    public string? Esquina { get; set; }
+    public double Lat { get; set; }
+    public double Lng { get; set; }
+}
+
+// ---- DTOs para el GeoJSON de paradas del GeoServer (WFS) ----
+public class ParadaFeatureCollection
+{
+    [JsonPropertyName("features")]
+    public List<ParadaFeature> Features { get; set; } = new();
+}
+
+public class ParadaFeature
+{
+    [JsonPropertyName("properties")]
+    public ParadaProperties? Properties { get; set; }
+
+    [JsonPropertyName("geometry")]
+    public Geometry? Geometry { get; set; }
+}
+
+public class ParadaProperties
+{
+    [JsonPropertyName("cod_ubic_parada")]
+    public int CodParada { get; set; }
+
+    [JsonPropertyName("desc_linea")]
+    public string? DescLinea { get; set; }
+
+    [JsonPropertyName("calle")]
+    public string? Calle { get; set; }
+
+    [JsonPropertyName("esquina")]
+    public string? Esquina { get; set; }
 }
 
 // ----------------------------------------------------------------------------

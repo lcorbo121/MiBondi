@@ -34,7 +34,7 @@ public class BusController : Controller
         }
     }
 
-    // GET /api/bus/lineas  -> DataProvider del <select> (número + texto de cada línea)
+    // GET /api/bus/lineas  -> DataProvider del autocompletado (número + texto de cada línea)
     [HttpGet("lineas")]
     public async Task<IActionResult> Lineas(CancellationToken ct)
     {
@@ -42,6 +42,29 @@ public class BusController : Controller
         {
             var lineas = await _stm.GetLineasAsync(ct);
             return Json(new { ok = true, count = lineas.Count, lineas });
+        }
+        catch (Exception ex)
+        {
+            Response.StatusCode = StatusCodes.Status502BadGateway;
+            return Json(new { ok = false, error = ex.Message });
+        }
+    }
+
+    // GET /api/bus/paradas?lineas=155,103  -> paradas por las que pasan esas líneas
+    [HttpGet("paradas")]
+    public async Task<IActionResult> Paradas(string? lineas, CancellationToken ct)
+    {
+        var filtro = string.IsNullOrWhiteSpace(lineas)
+            ? Array.Empty<string>()
+            : lineas.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        if (filtro.Length == 0)
+            return Json(new { ok = true, count = 0, paradas = Array.Empty<object>() });
+
+        try
+        {
+            var paradas = await _stm.GetParadasAsync(filtro, ct);
+            return Json(new { ok = true, count = paradas.Count, paradas });
         }
         catch (Exception ex)
         {

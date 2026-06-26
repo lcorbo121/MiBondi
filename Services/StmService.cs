@@ -19,6 +19,8 @@ public class StmService : IStmService
     private readonly HttpClient _http;
     private readonly ILogger<StmService> _logger;
     private readonly string _endpoint;
+    private readonly string _wfsUrl;
+    private readonly string _paradasLayer;
 
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
 
@@ -28,6 +30,10 @@ public class StmService : IStmService
         _logger = logger;
         _endpoint = config["Stm:Endpoint"]
                     ?? "https://www.montevideo.gub.uy/buses/rest/stm-online";
+        _wfsUrl = config["Paradas:WfsUrl"]
+                    ?? "https://geoserver.montevideo.gub.uy/geoserver/wfs";
+        _paradasLayer = config["Paradas:Layer"]
+                    ?? "imm:v_uptu_paradas_con_horarios";
     }
 
     public async Task<IReadOnlyList<Bus>> GetBusesAsync(
@@ -103,5 +109,57 @@ public class StmService : IStmService
 
         _logger.LogInformation("DataProvider: {Count} líneas distintas en circulación", lineas.Count);
         return lineas;
+    }
+
+    public async Task<IReadOnlyList<Parada>> GetParadasAsync(
+        IEnumerable<string> lineas, CancellationToken ct = default)
+    {
+        // Sanitiza (solo alfanuméricos) para armar el CQL_FILTER sin riesgo de inyección.
+        var ls = lineas
+            .Where(l => !string.IsNullOrWhiteSpace(l))
+            .Select(l => new string(l.Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant())
+            .Where(l => l.Length > 0)
+            .Distinct()
+            .ToArray();
+
+        if (ls.Length == 0) return Array.Empty<Parada>();
+
+        var inList = string.Join(",", ls.Select(l => $"'{l}'"));
+        var cql = $"desc_linea IN ({inList})";
+        var url = $"{_wfsUrl}?service=WFS&version=2.0.0&request=GetFeature" +
+                  $"&typeNames={Uri.EscapeDataString(_paradasLayer)}" +
+                  $"&outputFormat=application/json&srsName=EPSG:4326" +
+                  $"&cql_filter={Uri.EscapeDataString(cql)}";
+
+        using var resp = await _http.GetAsync(url, ct);
+        resp.EnsureSuccessStatusCode();
+
+        await using var stream = await resp.Content.ReadAsStreamAsync(ct);
+        var fc = await JsonSerializer.DeserializeAsync<ParadaFeatureCollection>(stream, JsonOpts, ct);
+
+        if (fc?.Features is null || fc.Features.Count == 0)
+            return Array.Empty<Parada>();
+
+        // Una línea recorre varias variantes (sentidos); deduplicamos por código de parada.
+        var porParada = new Dictionary<int, Parada>();
+        foreach (var f in fc.Features)
+        {
+            if (f.Geometry?.Coordinates is { Length: >= 2 } c && f.Properties is { } p
+                && !porParada.ContainsKey(p.CodParada))
+            {
+                porParada[p.CodParada] = new Parada
+                {
+                    Cod = p.CodParada,
+                    Linea = p.DescLinea,
+                    Calle = p.Calle,
+                    Esquina = p.Esquina,
+                    Lng = c[0],
+                    Lat = c[1]
+                };
+            }
+        }
+
+        _logger.LogInformation("Paradas: {Count} para líneas {Lineas}", porParada.Count, string.Join(",", ls));
+        return porParada.Values.ToList();
     }
 }

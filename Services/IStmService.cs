@@ -17,7 +17,12 @@ public interface IStmService
 
     /// <summary>
     /// DataProvider de líneas: lista distinta de líneas en circulación (número + texto),
-    /// para poblar el &lt;select&gt; del filtro.
+    /// para poblar el autocompletado del filtro.
     /// </summary>
     Task<IReadOnlyList<LineaInfo>> GetLineasAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Paradas por las que pasan las líneas indicadas (capa de paradas del mapa).
+    /// </summary>
+    Task<IReadOnlyList<Parada>> GetParadasAsync(IEnumerable<string> lineas, CancellationToken ct = default);
 }

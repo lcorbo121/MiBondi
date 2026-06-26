@@ -237,14 +237,18 @@
             { maxZoom: 19, attribution: 'Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics' }
         );
 
-        // Selector de capas (arriba a la derecha)
+        // Capa de paradas (se llena al buscar una línea). Es overlay -> se puede apagar.
+        const capaParadas = L.layerGroup().addTo(map);
+
+        // Selector de capas (arriba a la derecha): bases + overlay de paradas.
         L.control.layers(
             {
                 'OpenStreetMap': osm,
                 'Cartografía Montevideo': cartoMvd,
                 'Satélite': satelite
             },
-            null, { collapsed: true }
+            { 'Paradas de la línea': capaParadas },
+            { collapsed: true }
         ).addTo(map);
 
         // --- Fix de redimensionado ---
@@ -373,12 +377,36 @@
             return conPuntaje.filter(x => x.s === max).map(x => x.b);  // solo los más similares
         }
 
+        // --- Paradas de la línea buscada (se cargan una vez por cambio de línea) ---
+        let paradasKey = null;   // recuerda qué líneas se dibujaron, para no recargar cada 2 s
+        async function actualizarParadas(lineas) {
+            const key = lineas.slice().sort().join(',');
+            if (key === paradasKey) return;     // ya están dibujadas estas paradas
+            paradasKey = key;
+            capaParadas.clearLayers();
+            if (!lineas.length) return;
+            try {
+                const r = await fetch('/api/bus/paradas?lineas=' + encodeURIComponent(lineas.join(',')));
+                const d = await r.json();
+                if (!d.ok || paradasKey !== key) return;   // cambió la búsqueda mientras cargaba
+                for (const p of d.paradas) {
+                    L.circleMarker([p.lat, p.lng], {
+                        radius: 4, color: '#e5484d', weight: 2, fillColor: '#fff', fillOpacity: 1
+                    })
+                        .bindPopup(`🚏 <b>Parada</b><br>${escapeHtml(p.calle || '')}` +
+                            `${p.esquina ? ' y ' + escapeHtml(p.esquina) : ''}`)
+                        .addTo(capaParadas);
+                }
+            } catch { /* las paradas son opcionales: si fallan, no rompemos el mapa */ }
+        }
+
         async function refrescar() {
             const raw = document.getElementById('filtro').value.trim();
 
             // Por defecto no se trae ningún ómnibus hasta que el usuario filtre.
             if (!raw && !mostrarTodos) {
                 capaBuses.clearLayers();
+                actualizarParadas([]);
                 document.getElementById('count').textContent = '0';
                 document.getElementById('reloj').textContent = 'elegí o escribí una línea o destino';
                 errorBox.style.display = 'none';
@@ -392,6 +420,9 @@
             if (!mostrarTodos && q.lineas.length) {
                 url += '?lineas=' + encodeURIComponent(q.lineas.join(','));
             }
+
+            // Paradas: solo cuando hay línea(s) concreta(s) (no en "Ver todos" ni búsqueda solo por texto).
+            actualizarParadas(mostrarTodos ? [] : q.lineas);
 
             try {
                 const r = await fetch(url);
@@ -462,8 +493,13 @@
             requestAnimationFrame(tick);
         }
 
-        // Carga el DataProvider del select; arranca vacío hasta que se filtre.
-        cargarLineas();
+        // Carga el autocompletado; al terminar, admite enlaces directos (#155 o #149 ADUANA).
+        cargarLineas().then(() => {
+            if (location.hash.length > 1) {
+                inputFiltro.value = decodeURIComponent(location.hash.slice(1));
+                buscar();
+            }
+        });
         refrescar();
         requestAnimationFrame(tick);
     </script>
