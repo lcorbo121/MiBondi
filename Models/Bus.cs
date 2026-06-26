@@ -15,9 +15,19 @@ public class Bus
     public string? TipoLinea { get; set; }
     public int Empresa { get; set; }
     public int CodigoBus { get; set; }
+    public int Variante { get; set; }
     public int Velocidad { get; set; }
     public double Lat { get; set; }
     public double Lng { get; set; }
+}
+
+/// <summary>
+/// Recorrido (traza) de una variante: sus paradas en orden, para dibujar la ruta.
+/// </summary>
+public class Recorrido
+{
+    public int Variante { get; set; }
+    public List<Parada> Paradas { get; set; } = new();
 }
 
 /// <summary>
@@ -67,6 +77,12 @@ public class ParadaProperties
     [JsonPropertyName("desc_linea")]
     public string? DescLinea { get; set; }
 
+    [JsonPropertyName("cod_variante")]
+    public int CodVariante { get; set; }
+
+    [JsonPropertyName("ordinal")]
+    public int Ordinal { get; set; }
+
     [JsonPropertyName("calle")]
     public string? Calle { get; set; }
 
@@ -111,6 +127,9 @@ public class BusProperties
 
     [JsonPropertyName("codigoBus")]
     public int CodigoBus { get; set; }
+
+    [JsonPropertyName("variante")]
+    public int Variante { get; set; }
 
     [JsonPropertyName("linea")]
     public string? Linea { get; set; }

@@ -21,6 +21,7 @@ public class StmService : IStmService
     private readonly string _endpoint;
     private readonly string _wfsUrl;
     private readonly string _paradasLayer;
+    private readonly string _variantesLayer;
 
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
 
@@ -34,6 +35,8 @@ public class StmService : IStmService
                     ?? "https://geoserver.montevideo.gub.uy/geoserver/wfs";
         _paradasLayer = config["Paradas:Layer"]
                     ?? "imm:v_uptu_paradas_con_horarios";
+        _variantesLayer = config["Paradas:LayerVariantes"]
+                    ?? "imm:Paradas_variantes_all";
     }
 
     public async Task<IReadOnlyList<Bus>> GetBusesAsync(
@@ -73,6 +76,7 @@ public class StmService : IStmService
                     TipoLinea = p.TipoLineaDesc,
                     Empresa = p.CodigoEmpresa,
                     CodigoBus = p.CodigoBus,
+                    Variante = p.Variante,
                     Velocidad = p.Velocidad,
                     Lng = c[0],
                     Lat = c[1]
@@ -161,5 +165,50 @@ public class StmService : IStmService
 
         _logger.LogInformation("Paradas: {Count} para líneas {Lineas}", porParada.Count, string.Join(",", ls));
         return porParada.Values.ToList();
+    }
+
+    public async Task<IReadOnlyList<Recorrido>> GetRecorridosAsync(
+        IEnumerable<int> variantes, CancellationToken ct = default)
+    {
+        var vs = variantes.Distinct().Where(v => v > 0).ToArray();
+        if (vs.Length == 0) return Array.Empty<Recorrido>();
+
+        var inList = string.Join(",", vs);   // enteros: seguro para el CQL
+        var cql = $"cod_variante IN ({inList})";
+        var url = $"{_wfsUrl}?service=WFS&version=2.0.0&request=GetFeature" +
+                  $"&typeNames={Uri.EscapeDataString(_variantesLayer)}" +
+                  $"&outputFormat=application/json&srsName=EPSG:4326" +
+                  $"&cql_filter={Uri.EscapeDataString(cql)}";
+
+        using var resp = await _http.GetAsync(url, ct);
+        resp.EnsureSuccessStatusCode();
+
+        await using var stream = await resp.Content.ReadAsStreamAsync(ct);
+        var fc = await JsonSerializer.DeserializeAsync<ParadaFeatureCollection>(stream, JsonOpts, ct);
+        if (fc?.Features is null || fc.Features.Count == 0)
+            return Array.Empty<Recorrido>();
+
+        // Agrupa por variante y ordena las paradas por su orden en el recorrido (ordinal).
+        var recorridos = fc.Features
+            .Where(f => f.Properties is not null && f.Geometry?.Coordinates is { Length: >= 2 })
+            .GroupBy(f => f.Properties!.CodVariante)
+            .Select(g => new Recorrido
+            {
+                Variante = g.Key,
+                Paradas = g.OrderBy(f => f.Properties!.Ordinal)
+                    .Select(f => new Parada
+                    {
+                        Cod = f.Properties!.CodParada,
+                        Calle = f.Properties.Calle,
+                        Esquina = f.Properties.Esquina,
+                        Lng = f.Geometry!.Coordinates![0],
+                        Lat = f.Geometry.Coordinates[1]
+                    })
+                    .ToList()
+            })
+            .ToList();
+
+        _logger.LogInformation("Recorridos: {Count} variantes ({Vs})", recorridos.Count, inList);
+        return recorridos;
     }
 }

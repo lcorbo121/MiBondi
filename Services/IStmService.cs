@@ -25,4 +25,9 @@ public interface IStmService
     /// Paradas por las que pasan las líneas indicadas (capa de paradas del mapa).
     /// </summary>
     Task<IReadOnlyList<Parada>> GetParadasAsync(IEnumerable<string> lineas, CancellationToken ct = default);
+
+    /// <summary>
+    /// Recorridos (trazas) de las variantes indicadas: paradas en orden para dibujar la ruta.
+    /// </summary>
+    Task<IReadOnlyList<Recorrido>> GetRecorridosAsync(IEnumerable<int> variantes, CancellationToken ct = default);
 }

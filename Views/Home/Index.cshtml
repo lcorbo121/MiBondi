@@ -22,8 +22,20 @@
         (function () {
             const SEL = 'center, a[href*="somee.com"], script[src*="somee"], script[src*="ads.mgmt"], ' +
                         'iframe[src*="somee"], iframe[src*="ads.mgmt"], [id*="WholeInsert"], [class*="WholeInsert"]';
+            const PROPIOS = new Set(['map', 'error', 'leyenda']);  // divs legítimos de la app
             const limpiar = () => {
-                try { document.querySelectorAll(SEL).forEach(el => el.remove()); } catch (_) { }
+                try {
+                    document.querySelectorAll(SEL).forEach(el => el.remove());
+                    // La barra de publicidad de somee es un <div> fixed con z-index máximo.
+                    document.querySelectorAll('[style*="2147483647"]').forEach(el => el.remove());
+                    // Cualquier <div> pegado directo al <body> que no sea de la app
+                    // (la barra de ads y su espaciador de 65px no tienen id ni clase).
+                    if (document.body) {
+                        [...document.body.children].forEach(el => {
+                            if (el.tagName === 'DIV' && !PROPIOS.has(el.id)) el.remove();
+                        });
+                    }
+                } catch (_) { }
             };
             try {
                 new MutationObserver(limpiar).observe(document.documentElement, { childList: true, subtree: true });
@@ -76,6 +88,7 @@
             flex-wrap: wrap;
         }
         .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.05rem; }
+        .brand .autor { font-weight: 500; font-size: .8rem; color: var(--accent); opacity: .85; }
         .brand .dot {
             width: 10px; height: 10px; border-radius: 50%;
             background: #2ecc71; box-shadow: 0 0 0 0 rgba(46,204,113,.7);
@@ -211,7 +224,7 @@
 </head>
 <body>
     <header>
-        <div class="brand"><span class="dot"></span>🚌 Bus en Vivo · Montevideo</div>
+        <div class="brand"><span class="dot"></span>🚌 Bus en Vivo · Montevideo<span class="autor">by Lcorbo</span></div>
         <div class="controls">
             <div class="buscador">
                 <input type="text" id="filtro" placeholder="Línea o destino: 149 ADUANA…"
@@ -271,17 +284,21 @@
             { maxZoom: 19, attribution: 'Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics' }
         );
 
-        // Capa de paradas (se llena al buscar una línea). Es overlay -> se puede apagar.
+        // Overlays (se llenan al buscar una línea). Son capas apagables con checkbox.
         const capaParadas = L.layerGroup().addTo(map);
+        const capaRecorridos = L.layerGroup().addTo(map);
 
-        // Selector de capas (arriba a la derecha): bases + overlay de paradas.
+        // Selector de capas (arriba a la derecha): bases + overlays (paradas y recorrido).
         L.control.layers(
             {
                 'OpenStreetMap': osm,
                 'Cartografía Montevideo': cartoMvd,
                 'Satélite': satelite
             },
-            { 'Paradas de la línea': capaParadas },
+            {
+                'Paradas de la línea': capaParadas,
+                'Recorrido (sentido)': capaRecorridos
+            },
             { collapsed: true }
         ).addTo(map);
 
@@ -449,6 +466,34 @@
             } catch { /* las paradas son opcionales: si fallan, no rompemos el mapa */ }
         }
 
+        // --- Recorrido (ruta) de las variantes que tienen buses activos ---
+        // Recibe un mapa { varianteCodigo: destino } y traza una polilínea por variante,
+        // coloreada según el sentido (mismo color que el bus). Se cachea por set de variantes.
+        let recorridosKey = null;
+        async function actualizarRecorridos(varianteDestino) {
+            const variantes = Object.keys(varianteDestino).filter(v => v && v !== '0');
+            const key = variantes.slice().sort().join(',');
+            if (key === recorridosKey) return;
+            recorridosKey = key;
+            capaRecorridos.clearLayers();
+            if (!variantes.length) return;
+            try {
+                const r = await fetch('/api/bus/recorridos?variantes=' + encodeURIComponent(variantes.join(',')));
+                const d = await r.json();
+                if (!d.ok || recorridosKey !== key) return;   // cambió mientras cargaba
+                for (const rec of d.recorridos) {
+                    if (!rec.paradas || rec.paradas.length < 2) continue;
+                    const color = colorDestino(varianteDestino[rec.variante]);
+                    const pts = rec.paradas.map(p => [p.lat, p.lng]);
+                    // Halo oscuro debajo + línea de color encima, para que resalte sobre el mapa.
+                    L.polyline(pts, { color: '#000', weight: 7, opacity: .25 }).addTo(capaRecorridos);
+                    L.polyline(pts, { color, weight: 4, opacity: .9 })
+                        .bindPopup(`🧭 <b>Recorrido →</b> ${escapeHtml(varianteDestino[rec.variante] || '')}`)
+                        .addTo(capaRecorridos);
+                }
+            } catch { /* el recorrido es opcional: si falla, no rompemos el mapa */ }
+        }
+
         async function refrescar() {
             const raw = document.getElementById('filtro').value.trim();
 
@@ -456,6 +501,7 @@
             if (!raw && !mostrarTodos) {
                 capaBuses.clearLayers();
                 actualizarParadas([]);
+                actualizarRecorridos({});
                 mapaColores = {}; actualizarLeyenda(false);
                 document.getElementById('count').textContent = '0';
                 document.getElementById('reloj').textContent = 'elegí o escribí una línea o destino';
@@ -501,6 +547,14 @@
                         )
                         .addTo(capaBuses);
                 }
+
+                // Recorrido (ruta) por sentido: una traza por cada variante que tiene buses activos.
+                const varianteDestino = {};
+                if (colorearSentido) {
+                    for (const b of buses) if (b.variante) varianteDestino[b.variante] = b.destino;
+                }
+                actualizarRecorridos(varianteDestino);
+
                 actualizarLeyenda(colorearSentido);
                 document.getElementById('count').textContent = buses.length;
                 document.getElementById('reloj').textContent = (q.texto && buses.length === 0)

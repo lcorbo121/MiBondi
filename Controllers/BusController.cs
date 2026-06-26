@@ -72,4 +72,29 @@ public class BusController : Controller
             return Json(new { ok = false, error = ex.Message });
         }
     }
+
+    // GET /api/bus/recorridos?variantes=9192,9193  -> traza de cada variante (paradas en orden)
+    [HttpGet("recorridos")]
+    public async Task<IActionResult> Recorridos(string? variantes, CancellationToken ct)
+    {
+        var vs = (variantes ?? "")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(s => int.TryParse(s, out var n) ? n : 0)
+            .Where(n => n > 0)
+            .ToArray();
+
+        if (vs.Length == 0)
+            return Json(new { ok = true, count = 0, recorridos = Array.Empty<object>() });
+
+        try
+        {
+            var recorridos = await _stm.GetRecorridosAsync(vs, ct);
+            return Json(new { ok = true, count = recorridos.Count, recorridos });
+        }
+        catch (Exception ex)
+        {
+            Response.StatusCode = StatusCodes.Status502BadGateway;
+            return Json(new { ok = false, error = ex.Message });
+        }
+    }
 }
