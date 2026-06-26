@@ -30,11 +30,6 @@ jobs:
           -p:PublishSingleFile=false -p:PublishTrimmed=false
           -o deploy
 
-      - name: Habilitar log de stdout (diagnóstico)
-        run: |
-          sed -i 's/stdoutLogEnabled="false"/stdoutLogEnabled="true"/' deploy/web.config
-          mkdir -p deploy/logs
-
       - name: Poner app_offline (apaga la app y libera los locks de IIS)
         run: |
           echo '<html><body><h2>Actualizando la app...</h2></body></html>' > app_offline.htm
