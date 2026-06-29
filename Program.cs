@@ -22,6 +22,18 @@ builder.Services.AddHttpClient<IStmService, StmService>(c =>
     c.DefaultRequestHeaders.UserAgent.ParseAdd("BusEnVivo/1.0");
 });
 
+// Caché en memoria para terminales (TTL largo) y resultados de horarios (TTL corto),
+// y así no golpear urubus en cada request del cliente.
+builder.Services.AddMemoryCache();
+
+// HttpClient tipado para consumir los horarios interurbanos de urubus.com.uy.
+// User-Agent identificable (uso personal/educativo) y timeout amplio (la página pesa ~2 MB).
+builder.Services.AddHttpClient<IUrubusService, UrubusService>(c =>
+{
+    c.Timeout = TimeSpan.FromSeconds(40);
+    c.DefaultRequestHeaders.UserAgent.ParseAdd("MiBondi/1.0 (proyecto educativo)");
+});
+
 var app = builder.Build();
 
 // Aplica el esquema reenviado por el proxy antes de cualquier decisión de redirección.

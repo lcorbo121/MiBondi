@@ -1,0 +1,295 @@
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Interurbano · Horarios de ómnibus</title>
+    <style>
+        :root {
+            --bg: #0e1117;
+            --panel: #161b22;
+            --line: #232a34;
+            --txt: #e6edf3;
+            --muted: #8b949e;
+            --accent: #ffb000;
+            --accent-2: #1f6feb;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0; min-height: 100vh;
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+            background: var(--bg); color: var(--txt);
+            -webkit-text-size-adjust: 100%;
+        }
+        a { color: var(--accent-2); }
+
+        header {
+            display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+            padding: 12px 18px; padding-top: calc(12px + env(safe-area-inset-top));
+            background: var(--panel); border-bottom: 1px solid var(--line);
+        }
+        .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.05rem; }
+        .brand .autor { font-weight: 500; font-size: .8rem; color: var(--accent); opacity: .85; }
+        header .volver { margin-left: auto; font-size: .9rem; text-decoration: none; }
+        header .volver:hover { text-decoration: underline; }
+
+        main { max-width: 1000px; margin: 0 auto; padding: 18px; }
+
+        /* --- Formulario de búsqueda --- */
+        .form {
+            display: grid; gap: 12px; background: var(--panel);
+            border: 1px solid var(--line); border-radius: 12px; padding: 16px;
+            grid-template-columns: 1fr 1fr auto auto;
+            align-items: end;
+        }
+        .campo { display: flex; flex-direction: column; gap: 5px; position: relative; }
+        .campo label { font-size: .78rem; color: var(--muted); font-weight: 600; }
+        input, select, button {
+            background: #0d1117; color: var(--txt); border: 1px solid var(--line);
+            border-radius: 8px; padding: 10px 12px; font-size: 16px; outline: none;
+        }
+        input:focus, select:focus { border-color: var(--accent-2); }
+        button {
+            background: var(--accent); color: #1a1100; border: 0; font-weight: 700;
+            cursor: pointer; white-space: nowrap;
+        }
+        button:hover { filter: brightness(1.08); }
+        button:disabled { opacity: .6; cursor: default; }
+
+        /* --- Combobox de terminales --- */
+        .sugerencias {
+            position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+            background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+            max-height: 300px; overflow-y: auto; z-index: 50; display: none;
+            box-shadow: 0 10px 30px rgba(0,0,0,.55);
+        }
+        .sugerencias.abierto { display: block; }
+        .sug-item {
+            padding: 9px 12px; cursor: pointer; font-size: .92rem;
+            border-bottom: 1px solid rgba(255,255,255,.05);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .sug-item:last-child { border-bottom: 0; }
+        .sug-item:hover, .sug-item.activo { background: var(--accent-2); color: #fff; }
+
+        /* --- Estado / resultados --- */
+        .estado { margin: 16px 2px; color: var(--muted); font-size: .95rem; }
+        .estado.error { color: #ffd7d7; background: #4d1f1f; border: 1px solid #6b2b2b;
+                        padding: 10px 14px; border-radius: 8px; }
+        .resumen { margin: 16px 2px 8px; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+        .resumen b { color: var(--accent); }
+        .resumen a.fuente { margin-left: auto; font-size: .88rem; }
+
+        .servicios { display: grid; gap: 10px; }
+        .servicio {
+            display: grid; grid-template-columns: 1.3fr 1.4fr .8fr .7fr .9fr; gap: 10px;
+            align-items: center; background: var(--panel);
+            border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px;
+        }
+        .empresa { font-weight: 700; }
+        .empresa small { display: block; color: var(--muted); font-weight: 500; font-size: .75rem; }
+        .horas { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+        .horas .flecha { color: var(--muted); margin: 0 6px; }
+        .horas small { display: block; color: var(--muted); font-size: .75rem; }
+        .cat { font-size: .82rem; }
+        .cat .badge {
+            display: inline-block; padding: 1px 8px; border-radius: 6px;
+            background: var(--accent-2); color: #fff; font-weight: 600; font-size: .72rem;
+        }
+        .asientos { text-align: center; font-variant-numeric: tabular-nums; }
+        .asientos small { display: block; color: var(--muted); font-size: .72rem; }
+        .precio { text-align: right; font-weight: 700; color: var(--accent); font-size: 1.1rem; }
+
+        @@media (max-width: 760px) {
+            .form { grid-template-columns: 1fr 1fr; }
+            .form .campo.fecha, .form .campo.asientos { grid-column: span 1; }
+            .form button { grid-column: span 2; }
+            .servicio { grid-template-columns: 1fr 1fr; }
+            .servicio .cat, .servicio .asientos { display: none; }
+            .precio { text-align: left; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="brand"><span>🚌 Interurbano · Horarios</span><span class="autor">by Lcorbo</span></div>
+        <a class="volver" href="/">← Volver al mapa en vivo</a>
+    </header>
+
+    <main>
+        <form class="form" id="form" autocomplete="off">
+            <div class="campo">
+                <label for="origen">Origen</label>
+                <input type="text" id="origen" placeholder="Ej: MONTEVIDEO (Todas)" role="combobox" />
+                <input type="hidden" id="origenId" />
+                <div class="sugerencias" id="sugOrigen"></div>
+            </div>
+            <div class="campo">
+                <label for="destino">Destino</label>
+                <input type="text" id="destino" placeholder="Ej: PUNTA DEL ESTE" role="combobox" />
+                <input type="hidden" id="destinoId" />
+                <div class="sugerencias" id="sugDestino"></div>
+            </div>
+            <div class="campo fecha">
+                <label for="fecha">Fecha</label>
+                <input type="date" id="fecha" />
+            </div>
+            <div class="campo asientos">
+                <label for="seats">Asientos</label>
+                <select id="seats">
+                    <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option>
+                </select>
+            </div>
+            <button type="submit" id="btnBuscar">Buscar</button>
+        </form>
+
+        <div class="estado" id="estado">Cargando terminales…</div>
+        <div class="resumen" id="resumen" style="display:none"></div>
+        <div class="servicios" id="servicios"></div>
+    </main>
+
+    <script>
+        const $ = (id) => document.getElementById(id);
+        const estado = $('estado');
+
+        function escapeHtml(s) {
+            return (s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+        }
+        function normalizar(s) {
+            return (s || '').toString().normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
+        }
+
+        // Fecha por defecto = hoy; mínimo = hoy.
+        const hoy = new Date();
+        const iso = hoy.toISOString().slice(0, 10);
+        $('fecha').value = iso;
+        $('fecha').min = iso;
+
+        // --- Catálogo de terminales ---
+        let TERMINALES = [];
+        async function cargarTerminales() {
+            try {
+                const r = await fetch('/api/horarios/terminales');
+                const d = await r.json();
+                if (!d.ok) throw new Error(d.error || 'No se pudo cargar el catálogo');
+                TERMINALES = d.destinos;   // origen y destino comparten el mismo universo
+                estado.textContent = 'Elegí origen, destino y fecha, y tocá Buscar.';
+            } catch (e) {
+                estado.className = 'estado error';
+                estado.textContent = '⚠ No se pudieron cargar las terminales: ' + e.message;
+            }
+        }
+
+        // --- Combobox reutilizable (input de texto + hidden con el id) ---
+        function combobox(inputId, hiddenId, cajaId) {
+            const input = $(inputId), hidden = $(hiddenId), caja = $(cajaId);
+            let items = [], activo = -1;
+
+            function abrir() {
+                const term = normalizar(input.value);
+                const res = (term
+                    ? TERMINALES.filter(t => normalizar(t.nombre).includes(term))
+                    : TERMINALES).slice(0, 40);
+                items = res; activo = -1;
+                if (!res.length) { cerrar(); return; }
+                caja.innerHTML = res.map((t, i) =>
+                    `<div class="sug-item" data-i="${i}">${escapeHtml(t.nombre)}</div>`).join('');
+                caja.classList.add('abierto');
+            }
+            function cerrar() { caja.classList.remove('abierto'); caja.innerHTML = ''; items = []; activo = -1; }
+            function resaltar(i) {
+                activo = i;
+                [...caja.children].forEach((el, idx) => el.classList.toggle('activo', idx === i));
+                caja.children[i]?.scrollIntoView({ block: 'nearest' });
+            }
+            function elegir(i) {
+                const t = items[i]; if (!t) return;
+                input.value = t.nombre; hidden.value = t.id; cerrar();
+            }
+
+            // Al escribir, invalidamos el id hasta que se elija una opción válida.
+            input.addEventListener('input', () => { hidden.value = ''; abrir(); });
+            input.addEventListener('focus', abrir);
+            input.addEventListener('keydown', (e) => {
+                const open = caja.classList.contains('abierto');
+                if (e.key === 'ArrowDown' && open) { e.preventDefault(); resaltar(Math.min(activo + 1, items.length - 1)); }
+                else if (e.key === 'ArrowUp' && open) { e.preventDefault(); resaltar(Math.max(activo - 1, 0)); }
+                else if (e.key === 'Enter' && open && activo >= 0) { e.preventDefault(); elegir(activo); }
+                else if (e.key === 'Escape') cerrar();
+            });
+            caja.addEventListener('mousedown', (e) => {
+                const it = e.target.closest('.sug-item');
+                if (it) { e.preventDefault(); elegir(+it.dataset.i); }
+            });
+            input.addEventListener('blur', () => setTimeout(cerrar, 150));
+        }
+        combobox('origen', 'origenId', 'sugOrigen');
+        combobox('destino', 'destinoId', 'sugDestino');
+
+        // --- Búsqueda ---
+        function fmtPrecio(p) { return /^\d+$/.test(p) ? '$' + p : (p || '—'); }
+
+        function render(d) {
+            const cont = $('servicios');
+            const resumen = $('resumen');
+            if (!d.servicios.length) {
+                resumen.style.display = 'none';
+                cont.innerHTML = '';
+                estado.className = 'estado';
+                estado.textContent = `Sin servicios para ${d.origen || ''} → ${d.destino || ''} el ${d.fecha}.`;
+                return;
+            }
+            estado.textContent = '';
+            resumen.style.display = 'flex';
+            resumen.innerHTML =
+                `<span><b>${d.count}</b> servicios · ${escapeHtml(d.origen)} → ${escapeHtml(d.destino)} · ${d.fecha}</span>` +
+                `<a class="fuente" href="${escapeHtml(d.urlFuente)}" target="_blank" rel="noopener">Comprar en urubus ↗</a>`;
+            cont.innerHTML = d.servicios.map(s => `
+                <div class="servicio">
+                    <div class="empresa">${escapeHtml(s.empresa)}<small>Nº ${escapeHtml(s.numeroServicio || '—')}</small></div>
+                    <div class="horas">${escapeHtml(s.salida)}<span class="flecha">→</span>${escapeHtml(s.llegada)}
+                        <small>${escapeHtml(s.duracion)}${s.ruta ? ' · ' + escapeHtml(s.ruta) : ''}</small></div>
+                    <div class="cat"><span class="badge">${escapeHtml(s.categoria || '—')}</span></div>
+                    <div class="asientos">${s.asientos > 0 ? s.asientos : '—'}<small>asientos</small></div>
+                    <div class="precio">${fmtPrecio(s.precio)}</div>
+                </div>`).join('');
+        }
+
+        $('form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const from = $('origenId').value, to = $('destinoId').value;
+            const fecha = $('fecha').value, seats = $('seats').value;
+
+            $('resumen').style.display = 'none';
+            $('servicios').innerHTML = '';
+            estado.className = 'estado';
+
+            if (!from) { estado.textContent = 'Elegí un origen de la lista.'; return; }
+            if (!to) { estado.textContent = 'Elegí un destino de la lista.'; return; }
+            if (from === to) { estado.textContent = 'El origen y el destino no pueden ser iguales.'; return; }
+
+            const btn = $('btnBuscar');
+            btn.disabled = true;
+            estado.textContent = 'Buscando horarios… (la primera búsqueda puede tardar unos segundos)';
+            try {
+                const url = `/api/horarios?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}` +
+                            `&fecha=${encodeURIComponent(fecha)}&seats=${encodeURIComponent(seats)}`;
+                const r = await fetch(url);
+                const d = await r.json();
+                if (!d.ok) throw new Error(d.error || 'Error desconocido');
+                render(d);
+            } catch (err) {
+                estado.className = 'estado error';
+                estado.textContent = '⚠ No se pudieron obtener los horarios: ' + err.message;
+            } finally {
+                btn.disabled = false;
+            }
+        });
+
+        cargarTerminales();
+    </script>
+</body>
+</html>

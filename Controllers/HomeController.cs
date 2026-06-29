@@ -11,6 +11,12 @@ public class HomeController : Controller
         return View();
     }
 
+    // Página de horarios interurbanos (consume /api/horarios).
+    public IActionResult Interurbano()
+    {
+        return View();
+    }
+
     public IActionResult Privacy()
     {
         return View();
