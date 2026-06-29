@@ -238,6 +238,7 @@
             </div>
             <button id="btnBuscar">Seguir</button>
             <button id="btnTodos" class="ghost">Ver todos</button>
+            <button id="btnDejarSeguir" class="ghost" style="display:none">Dejar de seguir</button>
             <span class="stat">
                 <span class="contador" id="contador" title="Próxima actualización">
                     <svg width="26" height="26" viewBox="0 0 26 26">
@@ -327,6 +328,17 @@
         // --- Marcadores ---
         const capaBuses = L.layerGroup().addTo(map);
         const errorBox = document.getElementById('error');
+
+        // --- Seguimiento de un bus (lo mantiene centrado en cada refresco) ---
+        let busSeguido = null;   // id del bus que estamos siguiendo (o null)
+        const btnDejarSeguir = document.getElementById('btnDejarSeguir');
+        function setSeguido(id) {
+            busSeguido = id;
+            btnDejarSeguir.style.display = id ? '' : 'none';
+        }
+        btnDejarSeguir.addEventListener('click', () => setSeguido(null));
+        // Click en el mapa vacío (no sobre un bus) deja de seguir.
+        map.on('click', () => setSeguido(null));
 
         function escapeHtml(s) {
             return (s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -542,9 +554,11 @@
                 else mapaColores = {};
 
                 capaBuses.clearLayers();
+                let seguidoAhora = null;   // bus seguido encontrado en esta tanda (para recentrar)
                 for (const b of buses) {
                     const color = colorearSentido ? colorDestino(b.destino) : '#1f6feb';
-                    L.marker([b.lat, b.lng], { icon: iconoBus(b.linea, b.destino, b.velocidad, color) })
+                    const idBus = b.id || `${b.codigoBus}-${b.empresa}`;
+                    const m = L.marker([b.lat, b.lng], { icon: iconoBus(b.linea, b.destino, b.velocidad, color) })
                         .bindPopup(
                             `<b><span class="pill" style="background:${color}">${b.linea ?? '?'}</span></b>` +
                             `${b.sublinea ?? ''}<br>` +
@@ -554,7 +568,13 @@
                             `🚍 <b>Coche:</b> ${b.codigoBus} (empresa ${b.empresa})`
                         )
                         .addTo(capaBuses);
+                    // Click sobre el bus: empezamos a seguirlo y lo centramos.
+                    m.on('click', () => { setSeguido(idBus); map.panTo([b.lat, b.lng], { animate: true }); });
+                    if (busSeguido && idBus === busSeguido) seguidoAhora = b;
                 }
+
+                // Si estamos siguiendo un bus, lo mantenemos centrado en su nueva posición.
+                if (seguidoAhora) map.panTo([seguidoAhora.lat, seguidoAhora.lng], { animate: true });
 
                 // Recorrido (ruta) por sentido: una traza por cada variante que tiene buses activos.
                 const varianteDestino = {};
