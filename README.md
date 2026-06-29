@@ -12,7 +12,7 @@ posición de los ómnibus del Sistema de Transporte Metropolitano (STM) de Monte
 
 - 🗺️ **Mapa con 3 capas base**: OpenStreetMap (por defecto), Cartografía oficial de Montevideo
   (GeoServer WMS) y Satélite (Esri World Imagery), conmutables desde el selector de capas.
-- ⏱️ **Auto-actualización cada 2 s** con un **contador circular tipo reloj** que muestra cuándo
+- ⏱️ **Auto-actualización cada 6 s** con un **contador circular tipo reloj** que muestra cuándo
   ocurre el próximo refresco.
 - 🔎 **Buscador tipo combobox**: al escribir aparece un desplegable con las líneas que coinciden
   (por número o por destino). Búsqueda *case-insensitive* y sin acentos.
@@ -28,6 +28,13 @@ posición de los ómnibus del Sistema de Transporte Metropolitano (STM) de Monte
   checkbox ("Recorrido (sentido)"). Solo se dibujan las rutas de las variantes con buses activos.
 - 🔵 **Marcadores informativos**: círculo con el número de línea + **badge de velocidad** (🔴
   detenido / 🟠 lento / 🟢 en movimiento).
+- 🌐 **Todos los subsistemas**: Montevideo, Canelones, San José y Metropolitano (incluye líneas
+  interdepartamentales como `Z4` o `2K`); el desplegable etiqueta el subsistema cuando no es
+  Montevideo. *(Sin el parámetro `subsistema`, el endpoint de la STM solo devuelve Montevideo.)*
+- 🎯 **Seguir un bus**: al tocar un coche, el mapa lo mantiene **centrado** en cada actualización
+  (botón "Dejar de seguir" o clic en el mapa para soltarlo).
+- 🚌 **Interurbano** (`/Home/Interurbano`): horarios de ómnibus **entre terminales de todo el país**
+  (datos de urubus), con buscador de origen/destino, fecha y enlace de compra. Ver más abajo.
 - 🔗 **Enlaces directos**: `…/#155` o `…/#149 ADUANA` precargan la búsqueda.
 - 📱 **Responsive** (iPhone 12 mini / 14): controles apilados, `100dvh`, *safe-area*, anti-zoom iOS.
 - 🧹 **Sin publicidad**: oculta el banner/branding que somee inyecta en el plan gratuito.
@@ -48,6 +55,18 @@ leyenda y las paradas:
 > Izquierda: **buscador con autocompletado** (desplegable al escribir). Derecha: **vista móvil**
 > responsive con buses, recorrido y badge de velocidad (`KM/H`).
 
+### 🚌 Interurbano (horarios entre terminales)
+
+Vista responsive (iPhone 14) de la búsqueda de horarios interurbanos, con empresa, salida → llegada,
+duración, categoría, asientos y precio, más el enlace **Comprar en urubus**:
+
+<p>
+  <img src="docs/interurbano-durazno.png" alt="Interurbano: Montevideo - Durazno" width="300" />&nbsp;
+  <img src="docs/interurbano-canelones.png" alt="Interurbano: Montevideo - Canelones" width="300" />
+</p>
+
+> Ejemplos: **Montevideo → Durazno** y **Montevideo → Canelones**.
+
 ## 🚀 Cómo correrlo
 
 Requisitos: [.NET SDK 10](https://dotnet.microsoft.com/download).
@@ -66,10 +85,14 @@ destino y elegí una sugerencia.
 | Capa | Archivo | Rol |
 |------|---------|-----|
 | **Model** | `Models/Bus.cs` | `Bus`, `LineaInfo`, `Parada`, `Recorrido` + DTOs de los GeoJSON |
+| **Model** | `Models/Horario.cs` | `Terminal`, `CatalogoTerminales`, `Servicio`, `BusquedaHorarios` (interurbano) |
 | **Service** | `Services/StmService.cs` | Cliente HTTP de la STM y del GeoServer (`IHttpClientFactory`) |
-| **Controller** | `Controllers/HomeController.cs` | Sirve la vista del mapa |
-| **Controller (API)** | `Controllers/BusController.cs` | Endpoints JSON que consume el frontend |
+| **Service** | `Services/UrubusService.cs` | Cliente de urubus: parsea el HTML con **AngleSharp** + caché |
+| **Controller** | `Controllers/HomeController.cs` | Sirve las vistas del mapa y del interurbano |
+| **Controller (API)** | `Controllers/BusController.cs` | Endpoints JSON del mapa en vivo |
+| **Controller (API)** | `Controllers/HorariosController.cs` | Endpoints JSON del interurbano |
 | **View** | `Views/Home/Index.cshtml` | Mapa Leaflet, combobox, capas, colores y leyenda |
+| **View** | `Views/Home/Interurbano.cshtml` | Buscador de horarios interurbanos (origen/destino/fecha) |
 
 ---
 
@@ -83,9 +106,11 @@ fuentes externas (así se evita CORS y se ocultan las URLs de origen).
 ### `GET /api/bus/posiciones?lineas=155,103`
 - **Qué hace:** devuelve la posición en vivo de los ómnibus. Sin `lineas` devuelve todos.
 - **Obtengo:** `{ ok, count, buses: [ { id, linea, sublinea, destino, tipoLinea, empresa, codigoBus, velocidad, lat, lng } ] }`
-- **Cómo lo manejo:** el mapa lo consulta cada 2 s. Renderiza un marcador por bus, lo **colorea
+- **Cómo lo manejo:** el mapa lo consulta cada 6 s. Renderiza un marcador por bus, lo **colorea
   según `destino`** (sentido), arma la etiqueta `→ destino` y el badge de velocidad. Si se buscó
   texto (ej. `ADUANA`), filtra los buses por similitud del lado del cliente.
+- **`subsistema`** (opcional, `-1` = todos por defecto): `1`=Montevideo, `2`=Canelones,
+  `3`=San José, `4`=Metropolitano.
 
 ### `GET /api/bus/lineas`
 - **Qué hace:** lista las líneas que están circulando (DataProvider del autocompletado).
@@ -107,15 +132,47 @@ fuentes externas (así se evita CORS y se ocultan las URLs de origen).
   su `variante` y `destino`), pide sus recorridos (se **cachea por set de variantes**) y dibuja una
   **polilínea por variante coloreada según el sentido** (mismo color que el bus). Overlay apagable.
 
-## B) Fuentes externas (consumidas por `StmService`) — **no requieren API key**
+## A.2) API interna del interurbano (en `HorariosController`)
+
+### `GET /api/horarios/terminales`
+- **Qué hace:** catálogo de terminales (orígenes y destinos) para los combobox.
+- **Obtengo:** `{ ok, origenes:[{id,nombre}], destinos:[{id,nombre}] }` (~380 terminales).
+- **Cómo lo manejo:** `UrubusService` lo saca del array `availableTags` de la home de urubus y lo
+  **cachea 12 h**. Origen y destino comparten el mismo universo de terminales.
+
+### `GET /api/horarios?from=83&to=101&fecha=2026-07-04&seats=1`
+- **Qué hace:** busca servicios entre dos terminales para una fecha (solo ida).
+- **Obtengo:** `{ ok, count, origen, destino, fecha, urlFuente, servicios:[ { empresa, numeroServicio,
+  categoria, salida, llegada, origen, destino, duracion, precio, asientos, ruta, fechaHoraSalida } ] }`
+- **Cómo lo manejo:** valida (IDs numéricos, origen ≠ destino, fecha no pasada), pide la página de
+  urubus y la parsea; resultado **cacheado 8 min** por `(from,to,fecha,seats)`. `urlFuente` enlaza a
+  la compra real en urubus.
+
+## B) Fuentes externas (consumidas por `StmService` y `UrubusService`) — **no requieren API key**
+
+### 0. Horarios interurbanos — urubus (scraping de HTML)
+```
+GET https://www.urubus.com.uy/es/omnibus-horarios?ter_from={id}&ter_to={id}&go_date=DD/MM/YYYY&seats=N
+GET https://www.urubus.com.uy/                      (home: catálogo de terminales en `availableTags`)
+```
+- **Detalle:** la página renderiza los resultados **server-side** (sin auth ni token). Cada servicio
+  es un `<div class="booking-item-container" empresa=… salida=… llegada=… precio=… asientos=…>`.
+  *Uso personal/educativo.*
+- **Cómo lo manejo:** `UrubusService` lee los bytes y decodifica UTF-8 a mano (urubus declara un
+  `charset=UTF8` que .NET rechaza), parsea con **AngleSharp** los atributos del contenedor, **cachea**
+  y expone JSON limpio. La compra real se deriva a urubus con `urlFuente`.
+
+### 1. Posiciones en tiempo real — STM
 
 ### 1. Posiciones en tiempo real — STM
 ```
 POST https://www.montevideo.gub.uy/buses/rest/stm-online
 Content-Type: application/json
-Body  {}                        -> todos los ómnibus
-Body  {"lineas":["155","103"]}  -> solo esas líneas
+Body  {"subsistema":-1}                        -> todos los subsistemas
+Body  {"subsistema":-1,"lineas":["155","103"]} -> solo esas líneas
 ```
+> ⚠️ Sin `subsistema`, el endpoint responde **solo Montevideo** (subsistema 1) y deja afuera
+> Canelones/San José/Metropolitano (líneas como `Z4`, `2K`). Por eso la app envía `subsistema:-1`.
 - **Detalle:** con `GET` responde **405**; necesita `POST` JSON. Devuelve un **GeoJSON
   FeatureCollection**; cada feature trae en `properties`: `codigoEmpresa`, `codigoBus`, `linea`,
   `sublinea`, `tipoLineaDesc`, `destinoDesc`, `velocidad`, y en `geometry` un `Point` con
@@ -189,7 +246,12 @@ GET https://geoserver.montevideo.gub.uy/geoserver/wfs
   "WmsUrl": "https://geoserver.montevideo.gub.uy/geoserver/wms",
   "WmsLayer": "stm_carto_basica",
   "CentroLat": -34.8721, "CentroLng": -56.1819, "Zoom": 12,
-  "RefrescoSegundos": 2
+  "RefrescoSegundos": 6
+},
+"Urubus": {                                         // horarios interurbanos
+  "BaseUrl": "https://www.urubus.com.uy",
+  "TerminalesHoras": 12,                            // TTL de caché del catálogo
+  "ResultadosMinutos": 8                            // TTL de caché de cada búsqueda
 }
 ```
 
@@ -202,4 +264,4 @@ sube todo por FTP y lo elimina para reiniciar la app. Credenciales en *secrets*
 
 ## 🛠️ Stack
 
-ASP.NET Core MVC · C# / .NET 10 · Leaflet · GeoJSON · WFS/WMS (GeoServer) · GitHub Actions.
+ASP.NET Core MVC · C# / .NET 10 · Leaflet · GeoJSON · WFS/WMS (GeoServer) · AngleSharp · GitHub Actions.
