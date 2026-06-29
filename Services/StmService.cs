@@ -40,15 +40,19 @@ public class StmService : IStmService
     }
 
     public async Task<IReadOnlyList<Bus>> GetBusesAsync(
-        IEnumerable<string>? lineas = null, CancellationToken ct = default)
+        IEnumerable<string>? lineas = null, int subsistema = -1, CancellationToken ct = default)
     {
         var filtro = lineas?
             .Where(l => !string.IsNullOrWhiteSpace(l))
             .Select(l => l.Trim())
             .ToArray() ?? Array.Empty<string>();
 
-        // {} = todos, {"lineas":[...]} = filtradas
-        object payload = filtro.Length > 0 ? new { lineas = filtro } : new { };
+        // El endpoint, sin "subsistema", responde SOLO Montevideo (subsistema 1) y deja afuera
+        // Canelones/San José/Metropolitano (líneas como Z4, 2K). subsistema=-1 trae todos.
+        // {"subsistema":-1} = todos los subsistemas; +lineas[...] filtra esas líneas.
+        object payload = filtro.Length > 0
+            ? new { subsistema, lineas = filtro }
+            : new { subsistema };
         var body = JsonSerializer.Serialize(payload);
 
         using var content = new StringContent(body, Encoding.UTF8, "application/json");
@@ -78,6 +82,8 @@ public class StmService : IStmService
                     CodigoBus = p.CodigoBus,
                     Variante = p.Variante,
                     Velocidad = p.Velocidad,
+                    SubsistemaCod = p.Subsistema,
+                    Subsistema = p.SubsistemaDesc,
                     Lng = c[0],
                     Lat = c[1]
                 });
@@ -92,15 +98,18 @@ public class StmService : IStmService
 
     public async Task<IReadOnlyList<LineaInfo>> GetLineasAsync(CancellationToken ct = default)
     {
-        // Construye el DataProvider a partir de las líneas que están circulando ahora.
-        var buses = await GetBusesAsync(null, ct);
+        // Construye el DataProvider a partir de las líneas que están circulando ahora
+        // (todos los subsistemas: Montevideo, Canelones, San José, Metropolitano).
+        var buses = await GetBusesAsync(null, -1, ct);
 
         var lineas = buses
             .Where(b => !string.IsNullOrWhiteSpace(b.Linea))
-            .GroupBy(b => b.Linea!)
+            // Un mismo código de línea puede existir en distintos subsistemas: separamos por ambos.
+            .GroupBy(b => new { Linea = b.Linea!, Subsistema = b.Subsistema ?? "" })
             .Select(g => new LineaInfo
             {
-                Linea = g.Key,
+                Linea = g.Key.Linea,
+                Subsistema = g.Key.Subsistema,
                 // Texto representativo de la línea (primera sublínea no vacía del grupo).
                 Texto = g.Select(x => x.Sublinea)
                          .FirstOrDefault(s => !string.IsNullOrWhiteSpace(s)) ?? ""

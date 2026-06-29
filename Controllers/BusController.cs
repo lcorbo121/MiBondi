@@ -15,8 +15,9 @@ public class BusController : Controller
 
     // GET /api/bus/posiciones
     // GET /api/bus/posiciones?lineas=155,103
+    // GET /api/bus/posiciones?subsistema=2        (-1=todos por defecto)
     [HttpGet("posiciones")]
-    public async Task<IActionResult> Posiciones(string? lineas, CancellationToken ct)
+    public async Task<IActionResult> Posiciones(string? lineas, int? subsistema, CancellationToken ct)
     {
         var filtro = string.IsNullOrWhiteSpace(lineas)
             ? null
@@ -24,7 +25,7 @@ public class BusController : Controller
 
         try
         {
-            var buses = await _stm.GetBusesAsync(filtro, ct);
+            var buses = await _stm.GetBusesAsync(filtro, subsistema ?? -1, ct);
             return Json(new { ok = true, count = buses.Count, buses });
         }
         catch (Exception ex)

@@ -13,7 +13,11 @@ public interface IStmService
     /// <param name="lineas">
     /// Líneas a filtrar (por ej. "155", "103"). Si es null o vacío se devuelven todas.
     /// </param>
-    Task<IReadOnlyList<Bus>> GetBusesAsync(IEnumerable<string>? lineas = null, CancellationToken ct = default);
+    /// <param name="subsistema">
+    /// Subsistema STM: -1=todos (Montevideo, Canelones, San José, Metropolitano), 1=Montevideo,
+    /// 2=Canelones, 3=San José, 4=Metropolitano. Sin este parámetro el endpoint solo da Montevideo.
+    /// </param>
+    Task<IReadOnlyList<Bus>> GetBusesAsync(IEnumerable<string>? lineas = null, int subsistema = -1, CancellationToken ct = default);
 
     /// <summary>
     /// DataProvider de líneas: lista distinta de líneas en circulación (número + texto),

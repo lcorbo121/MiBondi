@@ -17,6 +17,8 @@ public class Bus
     public int CodigoBus { get; set; }
     public int Variante { get; set; }
     public int Velocidad { get; set; }
+    public int SubsistemaCod { get; set; }
+    public string? Subsistema { get; set; }
     public double Lat { get; set; }
     public double Lng { get; set; }
 }
@@ -38,6 +40,7 @@ public class LineaInfo
 {
     public string Linea { get; set; } = "";
     public string Texto { get; set; } = "";
+    public string Subsistema { get; set; } = "";
 }
 
 /// <summary>
@@ -145,4 +148,10 @@ public class BusProperties
 
     [JsonPropertyName("velocidad")]
     public int Velocidad { get; set; }
+
+    [JsonPropertyName("subsistema")]
+    public int Subsistema { get; set; }
+
+    [JsonPropertyName("subsistemaDesc")]
+    public string? SubsistemaDesc { get; set; }
 }
