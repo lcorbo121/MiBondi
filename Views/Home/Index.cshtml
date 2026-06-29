@@ -357,27 +357,28 @@
             const ancho = Math.max(30, 16 + numero.length * 8);
             const colorBus = color || '#1f6feb';
 
-            // Badge circular con la velocidad, por fuera y ARRIBA del círculo del bus.
-            const vel = Number.isFinite(velocidad) ? velocidad : 0;
-            const colorVel = vel <= 5 ? '#e5484d' : (vel <= 20 ? '#f5a623' : '#2ecc71'); // detenido / lento / rápido
-            const badgeVel = `<div title="${vel} km/h" style="position:absolute;top:-15px;left:50%;
-                        transform:translateX(-50%);min-width:22px;padding:1px 4px;border-radius:9px;
-                        background:${colorVel};color:#fff;border:2px solid #fff;box-sizing:border-box;
-                        display:flex;flex-direction:column;align-items:center;line-height:1;
-                        box-shadow:0 1px 3px rgba(0,0,0,.5)">
-                        <span style="font:800 10px system-ui">${vel}</span>
-                        <span style="font:700 6px system-ui;letter-spacing:.4px;opacity:.9;margin-top:1px">KM/H</span></div>`;
-
-            const circulo = `<div style="position:relative;flex:0 0 auto">${badgeVel}` +
-                        `<div style="background:${colorBus};color:#fff;border:2px solid #fff;
-                        width:${ancho}px;height:30px;border-radius:50%;
+            // Un SOLO círculo con el número de línea (coloreado por sentido). Sin badge encima
+            // para no tapar el número.
+            const circulo = `<div style="background:${colorBus};color:#fff;border:2px solid #fff;
+                        width:${ancho}px;height:30px;border-radius:50%;flex:0 0 auto;
                         display:flex;align-items:center;justify-content:center;
-                        font:700 12px system-ui;box-shadow:0 1px 5px rgba(0,0,0,.55)">${escapeHtml(numero)}</div></div>`;
-            // Etiqueta con el SENTIDO (hacia dónde va el bus), por FUERA del círculo.
-            const etiqueta = destino
+                        font:700 13px system-ui;box-shadow:0 1px 5px rgba(0,0,0,.55)">${escapeHtml(numero)}</div>`;
+
+            // Velocidad: SOLO se muestra si es > 0. Muchos buses (sobre todo de otros subsistemas)
+            // reportan 0 aunque se muevan; en ese caso se oculta para no mostrar "0 km/h" engañoso.
+            const vel = Number.isFinite(velocidad) ? velocidad : 0;
+            const colorVel = vel <= 20 ? '#f5a623' : '#2ecc71'; // lento / rápido
+            const chipVel = vel > 0
+                ? `<span style="display:inline-block;margin-left:6px;padding:0 5px;border-radius:6px;
+                        background:${colorVel};color:#fff;font:700 10px system-ui">${vel} km/h</span>`
+                : '';
+
+            // Etiqueta con el SENTIDO (+ velocidad si la hay), por FUERA del círculo.
+            const contenido = (destino ? `→ ${escapeHtml(destino)}` : '') + chipVel;
+            const etiqueta = contenido
                 ? `<div style="background:rgba(255,255,255,.92);color:#111;border-left:4px solid ${colorBus};
                         border-radius:6px;padding:2px 7px;font:600 11px system-ui;white-space:nowrap;
-                        box-shadow:0 1px 4px rgba(0,0,0,.35)">→ ${escapeHtml(destino)}</div>`
+                        box-shadow:0 1px 4px rgba(0,0,0,.35)">${contenido}</div>`
                 : '';
             return L.divIcon({
                 className: '',
@@ -571,7 +572,7 @@
                             `${b.sublinea ?? ''}<br>` +
                             `🧭 <b>Sentido →</b> ${b.destino ?? '—'}<br>` +
                             `🌐 <b>Subsistema:</b> ${b.subsistema ?? '—'}<br>` +
-                            `⚡ <b>Velocidad:</b> ${b.velocidad} km/h<br>` +
+                            `⚡ <b>Velocidad:</b> ${b.velocidad > 0 ? b.velocidad + ' km/h' : 'sin dato'}<br>` +
                             `🚍 <b>Coche:</b> ${b.codigoBus} (empresa ${b.empresa})`
                         )
                         .addTo(capaBuses);
