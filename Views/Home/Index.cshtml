@@ -418,15 +418,15 @@
         // --- Mapa ---
         const map = L.map('map', { zoomControl: true }).setView(CFG.centro, CFG.zoom);
 
-        // Capa base por DEFECTO: mapa oscuro y limpio (CARTO Dark Matter),
-        // a juego con el tema de la app. Estilo cercano a Apple Maps de noche.
+        // Capa base por DEFECTO: mapa de calles simple y claro (CARTO Voyager),
+        // estilo Google/Apple Maps de día. Limpio, sin saturar como OSM.
         const cartoAttr = '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · © <a href="https://carto.com/attributions">CARTO</a>';
-        const mapaOscuro = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        const mapaSimple = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
             maxZoom: 20, subdomains: 'abcd', detectRetina: true, attribution: cartoAttr
         }).addTo(map);
 
-        // Mapa de calles simple y claro (CARTO Voyager), estilo Google/Apple Maps de día.
-        const mapaSimple = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        // Variante oscura, a juego con el tema (CARTO Dark Matter), estilo Apple Maps de noche.
+        const mapaOscuro = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
             maxZoom: 20, subdomains: 'abcd', detectRetina: true, attribution: cartoAttr
         });
 
@@ -457,8 +457,8 @@
         // Selector de capas (arriba a la derecha): bases + overlays (paradas y recorrido).
         L.control.layers(
             {
-                'Mapa oscuro': mapaOscuro,
                 'Mapa simple': mapaSimple,
+                'Mapa oscuro': mapaOscuro,
                 'OpenStreetMap': osm,
                 'Cartografía Montevideo': cartoMvd,
                 'Satélite': satelite

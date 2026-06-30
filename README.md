@@ -10,8 +10,9 @@ posición de los ómnibus del Sistema de Transporte Metropolitano (STM) de Monte
 
 ## ✨ Características
 
-- 🗺️ **Mapa con 3 capas base**: OpenStreetMap (por defecto), Cartografía oficial de Montevideo
-  (GeoServer WMS) y Satélite (Esri World Imagery), conmutables desde el selector de capas.
+- 🗺️ **Mapa con 5 capas base**: **Mapa simple** (CARTO Voyager, *por defecto*) y **Mapa oscuro**
+  (CARTO Dark Matter) —ambos limpios, estilo Google/Apple Maps—, más OpenStreetMap, Cartografía oficial de
+  Montevideo (GeoServer WMS) y Satélite (Esri World Imagery), conmutables desde el selector de capas.
 - ⏱️ **Auto-actualización cada 6 s** con un **contador circular tipo reloj** que muestra cuándo
   ocurre el próximo refresco.
 - 🔎 **Buscador tipo combobox**: al escribir aparece un desplegable con las líneas que coinciden
@@ -34,38 +35,44 @@ posición de los ómnibus del Sistema de Transporte Metropolitano (STM) de Monte
 - 🎯 **Seguir un bus**: al tocar un coche, el mapa lo mantiene **centrado** en cada actualización
   (botón "Dejar de seguir" o clic en el mapa para soltarlo).
 - 🚌 **Interurbano** (`/Home/Interurbano`): horarios de ómnibus **entre terminales de todo el país**
-  (datos de urubus), con buscador de origen/destino, fecha y enlace de compra. Ver más abajo.
+  (datos de urubus), con buscador de origen/destino (botón **⇅ para intercambiarlos**), fecha,
+  **stepper de asientos**, **animación de carga** mientras busca y enlace de compra. Ver más abajo.
 - 🔗 **Enlaces directos**: `…/#155` o `…/#149 ADUANA` precargan la búsqueda.
-- 📱 **Responsive** (iPhone 12 mini / 14): controles apilados, `100dvh`, *safe-area*, anti-zoom iOS.
+- 📱 **Diseño mobile-first estilo iOS/Apple**: mapa a pantalla completa, **buscador flotante** con
+  botón ✕ para limpiar, **hoja inferior arrastrable** (deslizá hacia abajo para ocultarla) con los
+  controles en la zona del pulgar, **FAB de "Mi ubicación"** (geolocalización) y materiales
+  translúcidos (*vibrancy*). `100dvh`, *safe-area* y anti-zoom de iOS. "Ver todos" es un **interruptor**.
 - 🧹 **Sin publicidad**: oculta el banner/branding que somee inyecta en el plan gratuito.
 - 🚀 **Deploy automático** a somee por FTP en cada push a `main` (GitHub Actions).
 
 ## 📸 Capturas
 
-Mapa con el **recorrido y el sentido (ida/vuelta)** de cada bus, coloreados por destino, con la
-leyenda y las paradas:
+Diseño **mobile-first estilo iOS** sobre el **mapa simple** (capa por defecto): el recorrido y el
+**sentido (ida/vuelta)** de cada bus coloreados por destino, con la hoja inferior (leyenda + contador
+en vivo + interruptor "Ver todos") y los badges de velocidad:
 
 ![Mapa con recorridos por sentido](docs/mapa-recorrido.png)
 
 <p>
-  <img src="docs/autocompletado.png" alt="Buscador con autocompletado" width="320" />&nbsp;
+  <img src="docs/autocompletado.png" alt="Buscador con autocompletado" width="300" />&nbsp;
   <img src="docs/movil.png" alt="Vista en celular (iPhone)" width="300" />
 </p>
 
-> Izquierda: **buscador con autocompletado** (desplegable al escribir). Derecha: **vista móvil**
-> responsive con buses, recorrido y badge de velocidad (`KM/H`).
+> Izquierda: **buscador flotante con autocompletado** y botón ✕ para limpiar. Derecha: **vista móvil**
+> con la hoja inferior arrastrable, el FAB de "Mi ubicación", buses, recorrido y badge de velocidad.
 
 ### 🚌 Interurbano (horarios entre terminales)
 
-Vista responsive (iPhone 14) de la búsqueda de horarios interurbanos, con empresa, salida → llegada,
+Vista móvil (iPhone) de la búsqueda de horarios interurbanos: campos estilo iOS con **⇅ para
+intercambiar** origen/destino y **stepper** de asientos; cada servicio con empresa, salida → llegada,
 duración, categoría, asientos y precio, más el enlace **Comprar en urubus**:
 
 <p>
-  <img src="docs/interurbano-durazno.png" alt="Interurbano: Montevideo - Durazno" width="300" />&nbsp;
+  <img src="docs/interurbano-puntadeleste.png" alt="Interurbano: Montevideo - Punta del Este" width="300" />&nbsp;
   <img src="docs/interurbano-canelones.png" alt="Interurbano: Montevideo - Canelones" width="300" />
 </p>
 
-> Ejemplos: **Montevideo → Durazno** y **Montevideo → Canelones**.
+> Ejemplos: **Montevideo → Punta del Este** y **Montevideo → Canelones**.
 
 ## 🚀 Cómo correrlo
 
@@ -226,7 +233,9 @@ GET https://geoserver.montevideo.gub.uy/geoserver/wfs
 ### 5. Capas de mapa (tiles, directo desde Leaflet en el navegador)
 | Capa | URL |
 |------|-----|
-| OpenStreetMap (default) | `https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png` |
+| Mapa simple · CARTO Voyager **(default)** | `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png` |
+| Mapa oscuro · CARTO Dark Matter | `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png` |
+| OpenStreetMap | `https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png` |
 | Satélite (Esri World Imagery) | `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}` |
 | Cartografía Montevideo (WMS) | `https://geoserver.montevideo.gub.uy/geoserver/wms` · capa `stm_carto_basica` (`L.tileLayer.wms`) |
 
