@@ -418,10 +418,22 @@
         // --- Mapa ---
         const map = L.map('map', { zoomControl: true }).setView(CFG.centro, CFG.zoom);
 
-        // Capa base por DEFECTO: OpenStreetMap
+        // Capa base por DEFECTO: mapa de calles simple y limpio (CARTO Voyager).
+        // Sin saturar como OSM; estilo cercano al de Google/Apple Maps.
+        const cartoAttr = '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · © <a href="https://carto.com/attributions">CARTO</a>';
+        const mapaSimple = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            maxZoom: 20, subdomains: 'abcd', detectRetina: true, attribution: cartoAttr
+        }).addTo(map);
+
+        // Variante oscura, a juego con el tema (CARTO Dark Matter).
+        const mapaOscuro = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            maxZoom: 20, subdomains: 'abcd', detectRetina: true, attribution: cartoAttr
+        });
+
+        // OpenStreetMap clásico (más detalle, queda como opción).
         const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19, attribution: '© OpenStreetMap'
-        }).addTo(map);
+        });
 
         // Cartografía oficial de Montevideo (GeoServer WMS de la IM)
         const cartoMvd = L.tileLayer.wms(CFG.wmsUrl, {
@@ -445,6 +457,8 @@
         // Selector de capas (arriba a la derecha): bases + overlays (paradas y recorrido).
         L.control.layers(
             {
+                'Mapa simple': mapaSimple,
+                'Mapa oscuro': mapaOscuro,
                 'OpenStreetMap': osm,
                 'Cartografía Montevideo': cartoMvd,
                 'Satélite': satelite
