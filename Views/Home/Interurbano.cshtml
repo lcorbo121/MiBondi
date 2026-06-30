@@ -9,116 +9,230 @@
     <title>Interurbano · Horarios de ómnibus</title>
     <style>
         :root {
-            --bg: #0e1117;
-            --panel: #161b22;
-            --line: #232a34;
-            --txt: #e6edf3;
-            --muted: #8b949e;
+            /* Mismo lenguaje que el mapa: iOS oscuro + materiales translúcidos */
+            --bg: #000;
+            --panel: #1c1c1e;
+            --txt: #f5f5f7;
+            --muted: rgba(235, 235, 245, .6);
             --accent: #ffb000;
-            --accent-2: #1f6feb;
+            --accent-ink: #2a1c00;
+            --accent-2: #0a84ff;
+            --line: rgba(255, 255, 255, .12);
+            --mat: rgba(28, 28, 30, .68);
+            --mat-blur: saturate(180%) blur(30px);
+            --fill-2: rgba(118, 118, 128, .24);
+            --fill-2-press: rgba(118, 118, 128, .4);
+            --radius: 13px;
+            --radius-lg: 22px;
+            --shadow: 0 10px 40px rgba(0, 0, 0, .4);
+            --hi: inset 0 .5px 0 rgba(255, 255, 255, .14);
         }
         * { box-sizing: border-box; }
+        html { height: 100%; }
         body {
-            margin: 0; min-height: 100vh;
-            font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+            margin: 0; min-height: 100vh; min-height: 100dvh;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", Roboto, sans-serif;
             background: var(--bg); color: var(--txt);
             -webkit-text-size-adjust: 100%;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            letter-spacing: -.01em;
         }
         a { color: var(--accent-2); }
+        /* Fondo con un degradado sutil para que no sea negro plano */
+        body::before {
+            content: ''; position: fixed; inset: 0; z-index: -1;
+            background:
+                radial-gradient(1200px 600px at 100% -10%, rgba(255, 176, 0, .06), transparent 60%),
+                radial-gradient(900px 500px at -10% 100%, rgba(10, 132, 255, .07), transparent 55%),
+                var(--bg);
+        }
 
+        /* ===== Barra superior translúcida (sticky) ===== */
         header {
-            display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-            padding: 12px 18px;
-            padding-top: calc(12px + env(safe-area-inset-top));
-            padding-left: calc(18px + env(safe-area-inset-left));
-            padding-right: calc(18px + env(safe-area-inset-right));
-            background: var(--panel); border-bottom: 1px solid var(--line);
+            position: sticky; top: 0; z-index: 50;
+            display: flex; align-items: center; gap: 12px;
+            padding: calc(12px + env(safe-area-inset-top)) 16px 12px;
+            padding-left: calc(16px + env(safe-area-inset-left));
+            padding-right: calc(16px + env(safe-area-inset-right));
+            background: var(--mat);
+            backdrop-filter: var(--mat-blur); -webkit-backdrop-filter: var(--mat-blur);
+            border-bottom: .5px solid var(--line);
         }
-        .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.05rem; }
-        .brand .autor { font-weight: 500; font-size: .8rem; color: var(--accent); opacity: .85; }
-        header .volver { margin-left: auto; font-size: .9rem; text-decoration: none; }
-        header .volver:hover { text-decoration: underline; }
+        .brand { display: flex; align-items: center; gap: 9px; font-weight: 600; font-size: 1.02rem; letter-spacing: -.02em; }
+        .brand .autor { font-weight: 500; font-size: .76rem; color: var(--accent); opacity: .85; }
+        header .volver {
+            margin-left: auto; flex: 0 0 auto;
+            font-size: .88rem; font-weight: 600; text-decoration: none; color: var(--accent-2);
+            background: var(--fill-2); padding: 7px 13px; border-radius: 980px; white-space: nowrap;
+            transition: background .15s ease;
+        }
+        header .volver:hover { background: var(--fill-2-press); }
 
-        main { max-width: 1000px; margin: 0 auto; padding: 18px; }
+        main {
+            max-width: 720px; margin: 0 auto;
+            padding: 18px 16px 40px;
+            padding-left: calc(16px + env(safe-area-inset-left));
+            padding-right: calc(16px + env(safe-area-inset-right));
+        }
 
-        /* --- Formulario de búsqueda --- */
+        /* ===== Tarjeta del formulario ===== */
         .form {
-            display: grid; gap: 12px; background: var(--panel);
-            border: 1px solid var(--line); border-radius: 12px; padding: 16px;
-            grid-template-columns: 1fr 1fr auto auto;
-            align-items: end;
+            display: flex; flex-direction: column; gap: 14px;
+            background: rgba(28, 28, 30, .55);
+            backdrop-filter: var(--mat-blur); -webkit-backdrop-filter: var(--mat-blur);
+            border: .5px solid var(--line); border-radius: var(--radius-lg);
+            padding: 16px; box-shadow: var(--shadow), var(--hi);
         }
-        .campo { display: flex; flex-direction: column; gap: 5px; position: relative; }
-        .campo label { font-size: .78rem; color: var(--muted); font-weight: 600; }
-        input, select, button {
-            background: #0d1117; color: var(--txt); border: 1px solid var(--line);
-            border-radius: 8px; padding: 10px 12px; font-size: 16px; outline: none;
-        }
-        input:focus, select:focus { border-color: var(--accent-2); }
-        button {
-            background: var(--accent); color: #1a1100; border: 0; font-weight: 700;
-            cursor: pointer; white-space: nowrap;
-        }
-        button:hover { filter: brightness(1.08); }
-        button:disabled { opacity: .6; cursor: default; }
 
-        /* --- Combobox de terminales --- */
+        /* Campos */
+        .campo { display: flex; flex-direction: column; gap: 6px; position: relative; }
+        .campo > label {
+            font-size: .72rem; font-weight: 600; color: var(--muted);
+            text-transform: uppercase; letter-spacing: .04em; padding-left: 2px;
+        }
+        .control {
+            display: flex; align-items: center; gap: 8px;
+            background: var(--fill-2); border: 1px solid transparent; border-radius: 12px;
+            padding: 0 12px; min-height: 50px;
+            transition: border-color .15s ease, background .15s ease;
+        }
+        .control:focus-within { border-color: var(--accent-2); background: rgba(120, 120, 128, .18); }
+        .control input, .control select {
+            flex: 1 1 auto; min-width: 0; width: 100%;
+            background: transparent; border: 0; outline: none; color: var(--txt);
+            font-size: 17px; letter-spacing: -.01em; padding: 13px 0; font-family: inherit;
+        }
+        .control input::placeholder { color: var(--muted); }
+        /* Selector de fecha nativo, en oscuro */
+        input[type="date"] { color-scheme: dark; }
+        input[type="date"]::-webkit-calendar-picker-indicator {
+            filter: invert(1); opacity: .55; cursor: pointer;
+        }
+
+        /* Bloque Origen / Destino con botón de intercambio */
+        .od { position: relative; display: flex; flex-direction: column; gap: 14px; }
+        .od .control { padding-right: 50px; }   /* deja lugar para el botón de swap */
+        .swap {
+            position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+            width: 40px; height: 40px; border-radius: 50%; z-index: 3;
+            background: var(--panel); border: .5px solid var(--line); color: var(--accent);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.15rem; cursor: pointer;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, .4), var(--hi);
+            transition: transform .25s cubic-bezier(.32, .72, 0, 1), filter .12s ease;
+        }
+        .swap:hover { filter: brightness(1.15); }
+        .swap:active { transform: translateY(-50%) scale(.9) rotate(180deg); }
+
+        /* Fila Fecha + Asientos */
+        .fila { display: flex; gap: 12px; }
+        .fila .campo { flex: 1 1 0; min-width: 0; }
+
+        /* Stepper de asientos (estilo iOS) */
+        .stepper {
+            display: flex; align-items: center; gap: 6px;
+            background: var(--fill-2); border-radius: 12px; min-height: 50px; padding: 0 6px;
+        }
+        .step {
+            flex: 0 0 auto; width: 40px; height: 38px; border-radius: 9px; border: 0;
+            background: rgba(120, 120, 128, .32); color: var(--txt);
+            font-size: 1.4rem; line-height: 1; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: transform .12s ease, opacity .12s ease;
+        }
+        .step:active { transform: scale(.9); }
+        .step:disabled { opacity: .35; cursor: default; }
+        .step-val { flex: 1 1 auto; text-align: center; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+        /* Botón principal */
+        .btn-buscar {
+            width: 100%; min-height: 52px; border: 0; border-radius: 14px; margin-top: 2px;
+            background: var(--accent); color: var(--accent-ink);
+            font-weight: 700; font-size: 1.05rem; letter-spacing: -.01em; cursor: pointer;
+            transition: transform .12s ease, filter .12s ease;
+        }
+        .btn-buscar:hover { filter: brightness(1.06); }
+        .btn-buscar:active { transform: scale(.985); }
+        .btn-buscar:disabled { opacity: .55; cursor: default; }
+
+        /* Combobox de terminales */
         .sugerencias {
-            position: absolute; top: calc(100% + 4px); left: 0; right: 0;
-            background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
-            max-height: 300px; overflow-y: auto; z-index: 50; display: none;
-            box-shadow: 0 10px 30px rgba(0,0,0,.55);
+            position: absolute; top: calc(100% + 6px); left: 0; right: 0;
+            background: var(--mat);
+            backdrop-filter: var(--mat-blur); -webkit-backdrop-filter: var(--mat-blur);
+            border: .5px solid var(--line); border-radius: var(--radius);
+            max-height: 300px; overflow-y: auto; z-index: 60; display: none;
+            box-shadow: var(--shadow), var(--hi); -webkit-overflow-scrolling: touch;
         }
         .sugerencias.abierto { display: block; }
         .sug-item {
-            padding: 9px 12px; cursor: pointer; font-size: .92rem;
-            border-bottom: 1px solid rgba(255,255,255,.05);
+            padding: 12px 14px; cursor: pointer; font-size: .98rem;
+            border-bottom: .5px solid var(--line);
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
         .sug-item:last-child { border-bottom: 0; }
-        .sug-item:hover, .sug-item.activo { background: var(--accent-2); color: #fff; }
+        .sug-item:hover, .sug-item.activo { background: var(--fill-2); }
 
-        /* --- Estado / resultados --- */
-        .estado { margin: 16px 2px; color: var(--muted); font-size: .95rem; }
-        .estado.error { color: #ffd7d7; background: #4d1f1f; border: 1px solid #6b2b2b;
-                        padding: 10px 14px; border-radius: 8px; }
-        .resumen { margin: 16px 2px 8px; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-        .resumen b { color: var(--accent); }
-        .resumen a.fuente { margin-left: auto; font-size: .88rem; }
-
-        .servicios { display: grid; gap: 10px; }
-        .servicio {
-            display: grid; grid-template-columns: 1.3fr 1.4fr .8fr .7fr .9fr; gap: 10px;
-            align-items: center; background: var(--panel);
-            border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px;
+        /* ===== Estado / resultados ===== */
+        .estado { margin: 18px 4px; color: var(--muted); font-size: .95rem; }
+        .estado small { color: var(--muted); opacity: .85; }
+        .estado.loading { color: var(--txt); display: flex; align-items: center; gap: 10px; }
+        /* Spinner de carga (anillo girando, tinte de marca) */
+        .spinner {
+            flex: 0 0 auto; width: 18px; height: 18px; border-radius: 50%;
+            border: 2px solid var(--fill-2); border-top-color: var(--accent);
+            animation: spin .7s linear infinite;
         }
-        .empresa { font-weight: 700; }
+        @@keyframes spin { to { transform: rotate(360deg); } }
+        /* Puntos que laten en el texto "Buscando…" */
+        .loading .puntos { display: inline-flex; gap: 3px; margin-left: 1px; }
+        .loading .puntos i {
+            width: 4px; height: 4px; border-radius: 50%; background: currentColor;
+            animation: latido 1.2s ease-in-out infinite;
+        }
+        .loading .puntos i:nth-child(2) { animation-delay: .2s; }
+        .loading .puntos i:nth-child(3) { animation-delay: .4s; }
+        @@keyframes latido { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }
+        .estado.error {
+            color: #ffd9d6; background: rgba(120, 30, 30, .82);
+            backdrop-filter: var(--mat-blur); -webkit-backdrop-filter: var(--mat-blur);
+            border: .5px solid rgba(255, 120, 110, .35); padding: 12px 15px; border-radius: var(--radius);
+        }
+        .resumen { margin: 18px 4px 10px; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; font-size: .95rem; }
+        .resumen b { color: var(--accent); }
+        .resumen a.fuente { margin-left: auto; font-size: .88rem; color: var(--accent-2); font-weight: 600; text-decoration: none; }
+        .resumen a.fuente:hover { text-decoration: underline; }
+
+        .servicios { display: flex; flex-direction: column; gap: 10px; }
+        .servicio {
+            display: grid; grid-template-columns: 1.3fr 1.4fr .8fr .7fr .9fr; gap: 10px; align-items: center;
+            background: rgba(28, 28, 30, .55);
+            backdrop-filter: var(--mat-blur); -webkit-backdrop-filter: var(--mat-blur);
+            border: .5px solid var(--line); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--hi);
+        }
+        .empresa { font-weight: 600; }
         .empresa small { display: block; color: var(--muted); font-weight: 500; font-size: .75rem; }
-        .horas { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
-        .horas .flecha { color: var(--muted); margin: 0 6px; }
-        .horas small { display: block; color: var(--muted); font-size: .75rem; }
+        .horas { font-size: 1.05rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+        .horas .flecha { color: var(--muted); margin: 0 6px; font-weight: 400; }
+        .horas small { display: block; color: var(--muted); font-size: .75rem; font-weight: 400; }
         .cat { font-size: .82rem; }
         .cat .badge {
-            display: inline-block; padding: 1px 8px; border-radius: 6px;
-            background: var(--accent-2); color: #fff; font-weight: 600; font-size: .72rem;
+            display: inline-block; padding: 2px 9px; border-radius: 980px;
+            background: var(--fill-2); color: var(--txt); font-weight: 600; font-size: .72rem;
         }
         .asientos { text-align: center; font-variant-numeric: tabular-nums; }
         .asientos small { display: block; color: var(--muted); font-size: .72rem; }
-        .precio { text-align: right; font-weight: 700; color: var(--accent); font-size: 1.1rem; }
+        .precio { text-align: right; font-weight: 700; color: var(--accent); font-size: 1.15rem; }
 
-        /* Celulares: iPhone 14 (390px), iPhone 12 mini (360px) y similares */
+        /* Accesibilidad */
+        :focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; border-radius: 8px; }
+        @@media (prefers-reduced-motion: reduce) {
+            * { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+        }
+
+        /* ===== Celulares (iPhone 14 390px, iPhone 12 mini 360px, …) ===== */
         @@media (max-width: 640px) {
-            main {
-                padding: 14px 12px;
-                padding-left: calc(12px + env(safe-area-inset-left));
-                padding-right: calc(12px + env(safe-area-inset-right));
-            }
-            .form { grid-template-columns: 1fr 1fr; gap: 10px; padding: 14px; }
-            /* Origen y destino ocupan la fila completa; fecha y asientos comparten la fila */
-            .form .campo:nth-child(1), .form .campo:nth-child(2) { grid-column: 1 / -1; }
-            .form button { grid-column: 1 / -1; width: 100%; }
-
-            /* Tarjeta reflowada en 2 columnas: no se oculta ninguna info */
             .servicio {
                 grid-template-columns: 1fr auto;
                 grid-template-areas:
@@ -133,49 +247,63 @@
             .cat      { grid-area: cat; align-self: center; }
             .asientos { grid-area: asientos; text-align: right; align-self: center; }
         }
-
-        /* iPhone 12 mini y pantallas muy angostas (≤360px): un toque más compacto */
         @@media (max-width: 360px) {
-            header { gap: 8px; padding: 10px 12px; }
             .brand { font-size: .96rem; }
-            main { padding: 12px 10px; }
-            .servicio { padding: 11px 12px; }
-            .horas { font-size: 1rem; }
-            input, select, button { padding: 9px 10px; }
+            header { gap: 8px; }
+            main { padding: 14px 12px 32px; }
+            .servicio { padding: 12px 13px; }
         }
     </style>
 </head>
 <body>
     <header>
         <div class="brand"><span>🚌 Interurbano · Horarios</span><span class="autor">by Lcorbo</span></div>
-        <a class="volver" href="/">← Volver al mapa en vivo</a>
+        <a class="volver" href="/">← Mapa en vivo</a>
     </header>
 
     <main>
         <form class="form" id="form" autocomplete="off">
-            <div class="campo">
-                <label for="origen">Origen</label>
-                <input type="text" id="origen" placeholder="Ej: MONTEVIDEO (Todas)" role="combobox" />
-                <input type="hidden" id="origenId" />
-                <div class="sugerencias" id="sugOrigen"></div>
+            <div class="od">
+                <div class="campo">
+                    <label for="origen">Origen</label>
+                    <div class="control">
+                        <input type="text" id="origen" placeholder="Ej: MONTEVIDEO (Todas)" role="combobox"
+                               enterkeyhint="search" aria-label="Terminal de origen" />
+                    </div>
+                    <input type="hidden" id="origenId" />
+                    <div class="sugerencias" id="sugOrigen"></div>
+                </div>
+
+                <button type="button" class="swap" id="btnSwap" aria-label="Intercambiar origen y destino" title="Intercambiar">⇅</button>
+
+                <div class="campo">
+                    <label for="destino">Destino</label>
+                    <div class="control">
+                        <input type="text" id="destino" placeholder="Ej: PUNTA DEL ESTE" role="combobox"
+                               enterkeyhint="search" aria-label="Terminal de destino" />
+                    </div>
+                    <input type="hidden" id="destinoId" />
+                    <div class="sugerencias" id="sugDestino"></div>
+                </div>
             </div>
-            <div class="campo">
-                <label for="destino">Destino</label>
-                <input type="text" id="destino" placeholder="Ej: PUNTA DEL ESTE" role="combobox" />
-                <input type="hidden" id="destinoId" />
-                <div class="sugerencias" id="sugDestino"></div>
+
+            <div class="fila">
+                <div class="campo">
+                    <label for="fecha">Fecha</label>
+                    <div class="control"><input type="date" id="fecha" /></div>
+                </div>
+                <div class="campo">
+                    <label for="seatsVal">Asientos</label>
+                    <div class="stepper">
+                        <button type="button" class="step" id="seatsMinus" aria-label="Quitar un asiento">−</button>
+                        <span class="step-val" id="seatsVal" aria-live="polite">1</span>
+                        <button type="button" class="step" id="seatsPlus" aria-label="Agregar un asiento">+</button>
+                        <input type="hidden" id="seats" value="1" />
+                    </div>
+                </div>
             </div>
-            <div class="campo fecha">
-                <label for="fecha">Fecha</label>
-                <input type="date" id="fecha" />
-            </div>
-            <div class="campo asientos">
-                <label for="seats">Asientos</label>
-                <select id="seats">
-                    <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option>
-                </select>
-            </div>
-            <button type="submit" id="btnBuscar">Buscar</button>
+
+            <button type="submit" id="btnBuscar" class="btn-buscar">Buscar horarios</button>
         </form>
 
         <div class="estado" id="estado">Cargando terminales…</div>
@@ -199,6 +327,27 @@
         const iso = hoy.toISOString().slice(0, 10);
         $('fecha').value = iso;
         $('fecha').min = iso;
+
+        // --- Stepper de asientos (1 a 5) -> escribe en el hidden #seats ---
+        const seatsHidden = $('seats'), seatsVal = $('seatsVal');
+        const seatsMinus = $('seatsMinus'), seatsPlus = $('seatsPlus');
+        function setSeats(n) {
+            n = Math.max(1, Math.min(5, n | 0));
+            seatsHidden.value = n;
+            seatsVal.textContent = n;
+            seatsMinus.disabled = n <= 1;
+            seatsPlus.disabled = n >= 5;
+        }
+        seatsMinus.addEventListener('click', () => setSeats(+seatsHidden.value - 1));
+        seatsPlus.addEventListener('click', () => setSeats(+seatsHidden.value + 1));
+        setSeats(1);
+
+        // --- Intercambiar origen <-> destino (texto + id) ---
+        $('btnSwap').addEventListener('click', () => {
+            const oi = $('origen'), oh = $('origenId'), di = $('destino'), dh = $('destinoId');
+            [oi.value, di.value] = [di.value, oi.value];
+            [oh.value, dh.value] = [dh.value, oh.value];
+        });
 
         // --- Catálogo de terminales ---
         let TERMINALES = [];
@@ -274,6 +423,7 @@
                 estado.textContent = `Sin servicios para ${d.origen || ''} → ${d.destino || ''} el ${d.fecha}.`;
                 return;
             }
+            estado.className = 'estado';
             estado.textContent = '';
             resumen.style.display = 'flex';
             resumen.innerHTML =
@@ -305,7 +455,12 @@
 
             const btn = $('btnBuscar');
             btn.disabled = true;
-            estado.textContent = 'Buscando horarios… (la primera búsqueda puede tardar unos segundos)';
+            btn.textContent = 'Buscando…';
+            estado.className = 'estado loading';
+            estado.innerHTML =
+                '<span class="spinner" aria-hidden="true"></span>' +
+                '<span>Buscando horarios<span class="puntos"><i></i><i></i><i></i></span><br>' +
+                '<small>La primera búsqueda puede tardar unos segundos.</small></span>';
             try {
                 const url = `/api/horarios?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}` +
                             `&fecha=${encodeURIComponent(fecha)}&seats=${encodeURIComponent(seats)}`;
@@ -318,6 +473,7 @@
                 estado.textContent = '⚠ No se pudieron obtener los horarios: ' + err.message;
             } finally {
                 btn.disabled = false;
+                btn.textContent = 'Buscar horarios';
             }
         });
 
