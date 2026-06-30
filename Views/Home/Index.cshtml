@@ -135,6 +135,18 @@
         #btnBuscar:hover { filter: brightness(1.06); }
         #btnBuscar:active { transform: scale(.96); }
 
+        /* Botón × para limpiar el texto del buscador (estilo iOS, aparece con texto) */
+        .clear {
+            flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
+            width: 22px; height: 22px; padding: 0; margin: 0 2px;
+            background: transparent; border: 0; cursor: pointer;
+            color: rgba(235, 235, 245, .35);
+        }
+        .clear[hidden] { display: none; }
+        .clear svg { width: 20px; height: 20px; display: block; }
+        .clear:hover { color: rgba(235, 235, 245, .55); }
+        .clear:active { transform: scale(.9); }
+
         /* Combobox: desplegable de sugerencias bajo el buscador */
         .buscador { position: relative; }
         .sugerencias {
@@ -208,9 +220,15 @@
             max-width: 640px; margin: 0 auto;
             transition: transform .3s cubic-bezier(.32, .72, 0, 1);
         }
+        .grabber-zone {
+            flex: 0 0 auto; display: flex; justify-content: center;
+            padding: 9px 0 7px; margin: -2px 0 -2px; cursor: grab;
+            touch-action: none; -webkit-tap-highlight-color: transparent;
+        }
+        .grabber-zone:active { cursor: grabbing; }
         .grabber {
-            width: 36px; height: 5px; border-radius: 3px; background: rgba(235, 235, 245, .3);
-            margin: 4px auto 2px; cursor: grab; flex: 0 0 auto;
+            width: 36px; height: 5px; border-radius: 3px;
+            background: rgba(235, 235, 245, .3); pointer-events: none;
         }
         .sheet-head { display: flex; align-items: center; gap: 10px; }
         .brand { display: flex; align-items: center; gap: 9px; font-weight: 600; font-size: 1rem; letter-spacing: -.02em; }
@@ -252,21 +270,39 @@
         .ley-item { display: flex; align-items: center; gap: 8px; padding: 2px 0; font-size: .85rem; }
         .ley-sw { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid #fff; flex: 0 0 auto; }
 
-        /* Botonera principal (botones rellenos secundarios estilo iOS) */
-        .acciones { display: flex; gap: 10px; }
+        /* Botonera: cada control ocupa su propia fila */
+        .acciones { display: flex; flex-direction: column; gap: 8px; }
         .acciones button {
-            flex: 1 1 0; min-width: 0; min-height: 44px;
+            width: 100%; min-height: 44px;
             border-radius: 12px; font-weight: 600; font-size: .98rem; letter-spacing: -.01em;
             cursor: pointer; border: 0; background: var(--fill-2); color: var(--txt);
             transition: background .15s ease, transform .12s ease;
         }
         .acciones button:hover { background: var(--fill-2-press); }
-        .acciones button:active { transform: scale(.98); }
+        .acciones button:active { transform: scale(.99); }
 
-        /* Hoja colapsada: deja solo la marca y el contador (más mapa a la vista) */
-        .sheet.min .leyenda,
-        .sheet.min .leyenda.visible,
-        .sheet.min .acciones { display: none; }
+        /* Interruptor estilo iOS para "Ver todos" */
+        .toggle-row {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 12px; padding: 0 8px 0 14px; text-align: left;
+        }
+        .toggle-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .switch {
+            flex: 0 0 auto; position: relative;
+            width: 51px; height: 31px; border-radius: 999px;
+            background: rgba(120, 120, 128, .32); transition: background .25s ease;
+        }
+        .switch .knob {
+            position: absolute; top: 2px; left: 2px;
+            width: 27px; height: 27px; border-radius: 50%; background: #fff;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, .35), 0 0 1px rgba(0, 0, 0, .25);
+            transition: transform .25s cubic-bezier(.32, .72, 0, 1);
+        }
+        .toggle-row.on .switch { background: var(--accent); }
+        .toggle-row.on .switch .knob { transform: translateX(20px); }
+
+        /* Oculta el panel deslizándolo hacia abajo; queda un asomo para volver a abrirlo */
+        .sheet.hidden { transform: translateY(calc(100% - 26px)); }
 
         /* Popups de Leaflet */
         .leaflet-popup-content { font-size: .88rem; line-height: 1.5; }
@@ -316,6 +352,12 @@
                 <input type="text" id="filtro" placeholder="Buscá tu línea o destino: 149 ADUANA…"
                        autocomplete="off" role="combobox" aria-expanded="false" aria-autocomplete="list"
                        aria-label="Buscar línea o destino" />
+                <button id="btnClear" class="clear" type="button" aria-label="Borrar búsqueda" hidden>
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <circle cx="12" cy="12" r="10" fill="currentColor" />
+                        <path d="M8.5 8.5l7 7M15.5 8.5l-7 7" stroke="#1c1c1e" stroke-width="2" stroke-linecap="round" />
+                    </svg>
+                </button>
                 <button id="btnBuscar">Buscar</button>
             </div>
             <div id="sugerencias" class="sugerencias"></div>
@@ -334,7 +376,9 @@
 
     <!-- Hoja inferior: controles al alcance del pulgar -->
     <div id="sheet" class="sheet">
-        <div class="grabber" id="grabber" role="button" tabindex="0" aria-label="Mostrar u ocultar los controles"></div>
+        <div class="grabber-zone" id="grabber" role="button" tabindex="0" aria-expanded="true" aria-label="Deslizá para ocultar o mostrar el panel">
+            <span class="grabber"></span>
+        </div>
         <div class="sheet-head">
             <div class="brand"><span class="dot"></span>🚌 Bus en Vivo · Montevideo<span class="autor">by Lcorbo</span></div>
             <a id="linkInterurbano" href="/Home/Interurbano" title="Horarios interurbanos">Interurbano</a>
@@ -350,8 +394,11 @@
         </div>
         <div id="leyenda" class="leyenda"></div>
         <div class="acciones">
-            <button id="btnTodos" class="ghost">Ver todos</button>
-            <button id="btnDejarSeguir" class="ghost" style="display:none">Dejar de seguir</button>
+            <button id="btnTodos" class="toggle-row" type="button" role="switch" aria-checked="false">
+                <span class="toggle-label">Ver todos los ómnibus</span>
+                <span class="switch" aria-hidden="true"><span class="knob"></span></span>
+            </button>
+            <button id="btnDejarSeguir" type="button" style="display:none">Dejar de seguir</button>
         </div>
     </div>
 
@@ -699,12 +746,36 @@
 
         // --- Eventos ---
         const inputFiltro = document.getElementById('filtro');
-        function buscar() { cerrarSug(); mostrarTodos = false; refrescar(); }
+        const btnTodos = document.getElementById('btnTodos');
+        const btnClear = document.getElementById('btnClear');
+
+        // Muestra la × solo cuando hay texto que borrar.
+        function sincronizarClear() { btnClear.hidden = inputFiltro.value.length === 0; }
+
+        // Refleja el estado del interruptor "Ver todos".
+        function sincronizarTodos() {
+            btnTodos.classList.toggle('on', mostrarTodos);
+            btnTodos.setAttribute('aria-checked', mostrarTodos ? 'true' : 'false');
+        }
+
+        function buscar() { cerrarSug(); mostrarTodos = false; sincronizarTodos(); sincronizarClear(); refrescar(); }
         document.getElementById('btnBuscar').addEventListener('click', buscar);
-        document.getElementById('btnTodos').addEventListener('click', () => {
+
+        // "Ver todos" como interruptor: lo prende y lo apaga.
+        btnTodos.addEventListener('click', () => {
+            mostrarTodos = !mostrarTodos;
+            if (mostrarTodos) { inputFiltro.value = ''; cerrarSug(); sincronizarClear(); }
+            sincronizarTodos();
+            refrescar();
+        });
+
+        // × del buscador: borra el texto, vuelve el foco al input y refresca.
+        btnClear.addEventListener('click', () => {
             inputFiltro.value = '';
+            sincronizarClear();
             cerrarSug();
-            mostrarTodos = true;   // acción explícita del usuario
+            inputFiltro.focus();
+            mostrarTodos = false; sincronizarTodos();
             refrescar();
         });
 
@@ -767,7 +838,7 @@
             inputFiltro.focus();
         }
 
-        inputFiltro.addEventListener('input', mostrarSugerencias);
+        inputFiltro.addEventListener('input', () => { sincronizarClear(); mostrarSugerencias(); });
         inputFiltro.addEventListener('focus', () => { if (terminoActual()) mostrarSugerencias(); });
         inputFiltro.addEventListener('keydown', (e) => {
             const abierto = cajaSug.classList.contains('abierto');
@@ -842,20 +913,64 @@
             );
         });
 
-        // --- Hoja inferior: colapsar/expandir para ver más mapa ---
+        // --- Hoja inferior arrastrable (estilo iOS): deslizá hacia abajo para ocultar ---
         const sheet = document.getElementById('sheet');
         const grabber = document.getElementById('grabber');
-        function toggleSheet() { sheet.classList.toggle('min'); publicarAltura(); }
-        grabber.addEventListener('click', toggleSheet);
+        const PEEK = 26;                 // px del panel que quedan visibles al ocultarlo
+        let sheetHidden = false;
+        let drag = null;                 // estado del arrastre en curso
+
+        function offsetOculto() { return Math.max(sheet.offsetHeight - PEEK, 0); }
+
+        // Publica el alto efectivo como --sheet-h: el FAB y la atribución de Leaflet
+        // se acomodan por encima del panel sin números mágicos.
+        function publicarAltura() {
+            const h = sheetHidden ? PEEK : sheet.offsetHeight;
+            document.documentElement.style.setProperty('--sheet-h', h + 'px');
+        }
+
+        function setHidden(h) {
+            sheetHidden = h;
+            sheet.style.transform = '';              // que mande la clase CSS
+            sheet.classList.toggle('hidden', h);
+            grabber.setAttribute('aria-expanded', h ? 'false' : 'true');
+            publicarAltura();
+        }
+
+        function onDown(e) {
+            drag = { y: e.clientY, base: sheetHidden ? offsetOculto() : 0, moved: 0 };
+            sheet.style.transition = 'none';         // sigue el dedo sin lag
+            try { grabber.setPointerCapture(e.pointerId); } catch (_) { }
+        }
+        function onMove(e) {
+            if (!drag) return;
+            const dy = e.clientY - drag.y;
+            drag.moved = dy;
+            let t = drag.base + dy;
+            const max = offsetOculto();
+            if (t < 0) t *= .3;                      // resistencia al pasarse hacia arriba
+            else if (t > max) t = max + (t - max) * .3;
+            sheet.style.transform = `translateY(${t}px)`;
+        }
+        function onUp() {
+            if (!drag) return;
+            const dy = drag.moved;
+            drag = null;
+            sheet.style.transition = '';
+            sheet.style.transform = '';
+            if (Math.abs(dy) < 6) { setHidden(!sheetHidden); return; }   // toque: alterna
+            if (sheetHidden) setHidden(dy >= -40);                       // arrastrar arriba abre
+            else setHidden(dy > 70);                                     // arrastrar abajo oculta
+        }
+
+        grabber.addEventListener('pointerdown', onDown);
+        grabber.addEventListener('pointermove', onMove);
+        grabber.addEventListener('pointerup', onUp);
+        grabber.addEventListener('pointercancel', onUp);
         grabber.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSheet(); }
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setHidden(!sheetHidden); }
         });
 
-        // Publica el alto real de la hoja como --sheet-h: el FAB y la atribución de Leaflet
-        // se acomodan por encima de ella sin números mágicos.
-        function publicarAltura() {
-            document.documentElement.style.setProperty('--sheet-h', sheet.offsetHeight + 'px');
-        }
         if (window.ResizeObserver) new ResizeObserver(publicarAltura).observe(sheet);
         window.addEventListener('orientationchange', () => setTimeout(publicarAltura, 200));
         publicarAltura();
