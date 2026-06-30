@@ -22,7 +22,8 @@
         (function () {
             const SEL = 'center, a[href*="somee.com"], script[src*="somee"], script[src*="ads.mgmt"], ' +
                         'iframe[src*="somee"], iframe[src*="ads.mgmt"], [id*="WholeInsert"], [class*="WholeInsert"]';
-            const PROPIOS = new Set(['map', 'error', 'leyenda']);  // divs legítimos de la app
+            // divs legítimos de la app (contenedores de nivel raíz que NO hay que borrar)
+            const PROPIOS = new Set(['map', 'error', 'leyenda', 'topbar', 'sheet']);
             const limpiar = () => {
                 try {
                     document.querySelectorAll(SEL).forEach(el => el.remove());
@@ -51,13 +52,24 @@
           crossorigin="" />
     <style>
         :root {
-            --bg: #0e1117;
-            --panel: #161b22;
-            --line: #232a34;
-            --txt: #e6edf3;
-            --muted: #8b949e;
-            --accent: #ffb000;
-            --accent-2: #1f6feb;
+            /* Paleta tipo iOS oscuro: negro OLED + materiales translúcidos (vibrancy) */
+            --bg: #000;
+            --panel: #1c1c1e;                       /* systemGray6 oscuro */
+            --txt: #f5f5f7;                          /* label */
+            --muted: rgba(235, 235, 245, .6);       /* secondaryLabel */
+            --accent: #ffb000;                       /* tinte de marca (en vivo) */
+            --accent-ink: #2a1c00;                   /* texto sobre ámbar */
+            --accent-2: #0a84ff;                     /* systemBlue (oscuro) */
+            --line: rgba(255, 255, 255, .12);        /* separador hairline */
+            --mat: rgba(28, 28, 30, .68);            /* material grueso */
+            --mat-blur: saturate(180%) blur(30px);   /* vibrancy de Apple */
+            --fill-2: rgba(118, 118, 128, .24);      /* relleno secundario iOS */
+            --fill-2-press: rgba(118, 118, 128, .4);
+            --radius: 13px;
+            --radius-lg: 22px;
+            --shadow: 0 10px 40px rgba(0, 0, 0, .4);
+            --hi: inset 0 .5px 0 rgba(255, 255, 255, .14);   /* brillo superior del material */
+            --sheet-h: 150px;          /* alto real de la hoja inferior (lo publica el JS) */
         }
         * { box-sizing: border-box; }
         html { height: 100%; }
@@ -65,124 +77,202 @@
             margin: 0;
             height: 100vh;
             height: 100dvh;            /* respeta la barra dinámica de Safari en iOS */
-            font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", Roboto, sans-serif;
             background: var(--bg);
             color: var(--txt);
-            display: flex;
-            flex-direction: column;
             overflow: hidden;          /* solo el mapa se desplaza, no la página */
             -webkit-text-size-adjust: 100%;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            letter-spacing: -.01em;
         }
 
-        header {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            padding: 12px 18px;
-            padding-top: calc(12px + env(safe-area-inset-top));
-            padding-left: calc(18px + env(safe-area-inset-left));
-            padding-right: calc(18px + env(safe-area-inset-right));
-            background: var(--panel);
-            border-bottom: 1px solid var(--line);
-            z-index: 1000;
-            flex-wrap: wrap;
-        }
-        .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.05rem; }
-        .brand .autor { font-weight: 500; font-size: .8rem; color: var(--accent); opacity: .85; }
-        .brand .dot {
-            width: 10px; height: 10px; border-radius: 50%;
-            background: #2ecc71; box-shadow: 0 0 0 0 rgba(46,204,113,.7);
-            animation: pulse 1.8s infinite;
-        }
-        @@keyframes pulse {
-            0%   { box-shadow: 0 0 0 0 rgba(46,204,113,.6); }
-            70%  { box-shadow: 0 0 0 8px rgba(46,204,113,0); }
-            100% { box-shadow: 0 0 0 0 rgba(46,204,113,0); }
-        }
+        /* ===== El mapa es el héroe: ocupa toda la pantalla, debajo de la UI ===== */
+        #map { position: fixed; inset: 0; z-index: 0; }
 
-        .controls { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-wrap: wrap; }
-        input[type="text"] {
-            background: #0d1117; color: var(--txt);
-            border: 1px solid var(--line); border-radius: 8px;
-            padding: 8px 12px; font-size: .9rem; width: 200px; outline: none;
+        /* Empuja los controles de Leaflet por debajo del buscador y por encima de la hoja */
+        .leaflet-top { top: calc(64px + env(safe-area-inset-top)); }
+        .leaflet-bottom { bottom: calc(var(--sheet-h) + 10px + env(safe-area-inset-bottom)); }
+        .leaflet-control-attribution {
+            font-size: 10px;
+            background: rgba(14, 17, 23, .7) !important;
+            color: var(--muted) !important;
         }
-        input[type="text"]:focus { border-color: var(--accent-2); }
+        .leaflet-control-attribution a { color: var(--muted) !important; }
 
-        /* Combobox: input + desplegable de sugerencias */
+        /* ===== Buscador flotante (arriba, tipo "glass") ===== */
+        .topbar {
+            position: fixed; z-index: 1000;
+            top: calc(10px + env(safe-area-inset-top));
+            left: calc(10px + env(safe-area-inset-left));
+            right: calc(10px + env(safe-area-inset-right));
+            max-width: 520px; margin: 0 auto;
+        }
+        .searchbar {
+            display: flex; align-items: center; gap: 8px;
+            background: var(--mat);
+            backdrop-filter: var(--mat-blur); -webkit-backdrop-filter: var(--mat-blur);
+            border: .5px solid var(--line); border-radius: var(--radius);
+            padding: 5px 5px 5px 14px;
+            box-shadow: var(--shadow), var(--hi);
+        }
+        .searchbar .lupa { color: var(--muted); flex: 0 0 auto; font-size: 1rem; display: flex; }
+        .searchbar input {
+            flex: 1 1 auto; min-width: 0;
+            background: transparent; color: var(--txt); border: 0; outline: none;
+            padding: 10px 0; font-size: 17px;     /* tamaño de cuerpo iOS; >=16px evita el zoom de iOS */
+            letter-spacing: -.01em;
+        }
+        .searchbar input::placeholder { color: var(--muted); }
+        #btnBuscar {
+            flex: 0 0 auto;
+            background: var(--accent); color: var(--accent-ink); border: 0;
+            border-radius: 10px; padding: 0 16px; height: 38px;
+            font-weight: 600; font-size: .95rem; letter-spacing: -.01em;
+            cursor: pointer;
+            transition: transform .12s ease, filter .12s ease;
+        }
+        #btnBuscar:hover { filter: brightness(1.06); }
+        #btnBuscar:active { transform: scale(.96); }
+
+        /* Combobox: desplegable de sugerencias bajo el buscador */
         .buscador { position: relative; }
         .sugerencias {
-            position: absolute; top: calc(100% + 4px); left: 0; right: 0;
-            background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
-            max-height: 280px; overflow-y: auto; z-index: 2000; display: none;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, .55);
+            position: absolute; top: calc(100% + 8px); left: 0; right: 0;
+            background: var(--mat);
+            backdrop-filter: var(--mat-blur); -webkit-backdrop-filter: var(--mat-blur);
+            border: .5px solid var(--line); border-radius: var(--radius);
+            max-height: 46vh; overflow-y: auto; z-index: 2000; display: none;
+            box-shadow: var(--shadow), var(--hi);
+            -webkit-overflow-scrolling: touch;
         }
         .sugerencias.abierto { display: block; }
         .sug-item {
-            padding: 8px 12px; cursor: pointer; font-size: .9rem;
-            border-bottom: 1px solid rgba(255, 255, 255, .05);
+            padding: 12px 14px; cursor: pointer; font-size: .98rem;
+            border-bottom: .5px solid var(--line);
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
         .sug-item:last-child { border-bottom: 0; }
-        .sug-item:hover, .sug-item.activo { background: var(--accent-2); color: #fff; }
-        .sug-item .num { color: var(--accent); font-weight: 700; margin-right: 8px; }
-        .sug-item:hover .num, .sug-item.activo .num { color: #fff; }
+        .sug-item:hover, .sug-item.activo { background: var(--fill-2); }
+        .sug-item .num { color: var(--accent); font-weight: 600; margin-right: 8px; font-variant-numeric: tabular-nums; }
         .sub-tag {
             display: inline-block; margin-left: 6px; padding: 0 6px;
             font-size: .72rem; font-weight: 600; border-radius: 6px;
             background: var(--accent-2); color: #fff; vertical-align: middle;
         }
-        select {
-            background: #0d1117; color: var(--txt);
-            border: 1px solid var(--line); border-radius: 8px;
-            padding: 8px 12px; font-size: .9rem; max-width: 260px; outline: none; cursor: pointer;
+
+        /* ===== Banner de error flotante ===== */
+        #error {
+            position: fixed; z-index: 1500;
+            top: calc(72px + env(safe-area-inset-top));
+            left: calc(10px + env(safe-area-inset-left));
+            right: calc(10px + env(safe-area-inset-right));
+            max-width: 520px; margin: 0 auto;
+            display: none; background: rgba(120, 30, 30, .82); color: #ffd9d6;
+            backdrop-filter: var(--mat-blur); -webkit-backdrop-filter: var(--mat-blur);
+            padding: 11px 15px; font-size: .88rem;
+            border: .5px solid rgba(255, 120, 110, .35); border-radius: var(--radius);
+            box-shadow: var(--shadow), var(--hi);
         }
-        select:focus { border-color: var(--accent-2); }
-        button {
-            background: var(--accent); color: #1a1100; border: 0;
-            border-radius: 8px; padding: 8px 14px; font-weight: 600;
-            cursor: pointer; font-size: .9rem;
+
+        /* ===== FAB: centrar en mi ubicación ===== */
+        .fab {
+            position: fixed; z-index: 1100;
+            right: calc(14px + env(safe-area-inset-right));
+            bottom: calc(var(--sheet-h) + 16px + env(safe-area-inset-bottom));
+            width: 46px; height: 46px; border-radius: 50%;
+            background: var(--mat); color: var(--accent-2); border: .5px solid var(--line);
+            backdrop-filter: var(--mat-blur); -webkit-backdrop-filter: var(--mat-blur);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; box-shadow: var(--shadow), var(--hi);
+            transition: bottom .25s ease, transform .12s ease, filter .12s ease;
         }
-        button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); }
-        button:hover { filter: brightness(1.08); }
+        .fab svg { width: 22px; height: 22px; display: block; }
+        .fab:hover { filter: brightness(1.12); }
+        .fab:active { transform: scale(.94); }
+        .fab.cargando { opacity: .5; }
+
+        /* ===== Hoja inferior: todos los controles en la zona del pulgar ===== */
+        .sheet {
+            position: fixed; z-index: 1050;
+            left: 0; right: 0; bottom: 0;
+            background: var(--mat);
+            backdrop-filter: var(--mat-blur); -webkit-backdrop-filter: var(--mat-blur);
+            border-top: .5px solid var(--line);
+            border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+            box-shadow: 0 -10px 40px rgba(0, 0, 0, .4), var(--hi);
+            padding: 6px 16px calc(14px + env(safe-area-inset-bottom));
+            padding-left: calc(16px + env(safe-area-inset-left));
+            padding-right: calc(16px + env(safe-area-inset-right));
+            display: flex; flex-direction: column; gap: 12px;
+            max-width: 640px; margin: 0 auto;
+            transition: transform .3s cubic-bezier(.32, .72, 0, 1);
+        }
+        .grabber {
+            width: 36px; height: 5px; border-radius: 3px; background: rgba(235, 235, 245, .3);
+            margin: 4px auto 2px; cursor: grab; flex: 0 0 auto;
+        }
+        .sheet-head { display: flex; align-items: center; gap: 10px; }
+        .brand { display: flex; align-items: center; gap: 9px; font-weight: 600; font-size: 1rem; letter-spacing: -.02em; }
+        .brand .autor { font-weight: 500; font-size: .76rem; color: var(--accent); opacity: .85; }
+        .brand .dot {
+            width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto;
+            background: #2ecc71; box-shadow: 0 0 0 0 rgba(46, 204, 113, .7);
+            animation: pulse 1.8s infinite;
+        }
+        @@keyframes pulse {
+            0%   { box-shadow: 0 0 0 0 rgba(46, 204, 113, .6); }
+            70%  { box-shadow: 0 0 0 8px rgba(46, 204, 113, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0); }
+        }
         #linkInterurbano {
-            background: transparent; color: var(--accent); border: 1px solid var(--accent);
-            border-radius: 8px; padding: 8px 14px; font-weight: 600; font-size: .9rem;
+            margin-left: auto; flex: 0 0 auto;
+            background: var(--fill-2); color: var(--accent);
+            border: 0; border-radius: 980px; padding: 7px 14px;
+            font-weight: 600; font-size: .85rem; letter-spacing: -.01em;
             text-decoration: none; white-space: nowrap;
+            transition: background .15s ease;
         }
-        #linkInterurbano:hover { background: var(--accent); color: #1a1100; }
+        #linkInterurbano:hover { background: var(--fill-2-press); }
 
-        .stat { font-size: .85rem; color: var(--muted); white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+        .stat { display: flex; align-items: center; gap: 9px; font-size: .85rem; color: var(--muted); }
         .stat b { color: var(--accent); font-variant-numeric: tabular-nums; }
-
         /* Contador circular estilo reloj: se llena hasta la próxima actualización */
-        .contador svg { display: block; transform: rotate(-90deg); }
+        .contador svg { display: block; transform: rotate(-90deg); flex: 0 0 auto; }
         .ring-track { fill: none; stroke: var(--line); stroke-width: 3; }
         .ring-prog {
             fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round;
             transition: stroke-dashoffset .08s linear;
         }
 
-        #map { flex: 1; }
-        /* Leyenda de sentidos (ida/vuelta) sobre el mapa */
-        .leyenda {
-            position: absolute; left: 10px; bottom: 22px; z-index: 1200;
-            background: rgba(22, 27, 34, .92); color: var(--txt);
-            border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
-            font-size: .8rem; max-width: 70vw; display: none;
-            box-shadow: 0 4px 16px rgba(0, 0, 0, .5);
-        }
+        /* Leyenda de sentidos (ida/vuelta), ahora dentro de la hoja */
+        .leyenda { display: none; border-top: 1px solid var(--line); padding-top: 9px; }
         .leyenda.visible { display: block; }
-        .leyenda h4 { margin: 0 0 5px; font-size: .72rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
-        .ley-item { display: flex; align-items: center; gap: 7px; padding: 2px 0; white-space: nowrap; }
+        .leyenda h4 { margin: 0 0 6px; font-size: .7rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+        .ley-item { display: flex; align-items: center; gap: 8px; padding: 2px 0; font-size: .85rem; }
         .ley-sw { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid #fff; flex: 0 0 auto; }
+
+        /* Botonera principal (botones rellenos secundarios estilo iOS) */
+        .acciones { display: flex; gap: 10px; }
+        .acciones button {
+            flex: 1 1 0; min-width: 0; min-height: 44px;
+            border-radius: 12px; font-weight: 600; font-size: .98rem; letter-spacing: -.01em;
+            cursor: pointer; border: 0; background: var(--fill-2); color: var(--txt);
+            transition: background .15s ease, transform .12s ease;
+        }
+        .acciones button:hover { background: var(--fill-2-press); }
+        .acciones button:active { transform: scale(.98); }
+
+        /* Hoja colapsada: deja solo la marca y el contador (más mapa a la vista) */
+        .sheet.min .leyenda,
+        .sheet.min .leyenda.visible,
+        .sheet.min .acciones { display: none; }
+
+        /* Popups de Leaflet */
         .leaflet-popup-content { font-size: .88rem; line-height: 1.5; }
         .pill {
             display: inline-block; background: var(--accent-2); color: #fff;
             border-radius: 6px; padding: 1px 8px; font-weight: 700; margin-right: 4px;
-        }
-        #error {
-            display: none; background: #4d1f1f; color: #ffd7d7;
-            padding: 6px 18px; font-size: .85rem; border-bottom: 1px solid #6b2b2b;
         }
 
         /* Oculta el branding/anuncios que somee inyecta en el plan gratuito */
@@ -192,74 +282,78 @@
         [id*="WholeInsert"],
         [class*="WholeInsert"] { display: none !important; }
 
-        /* ===== Celulares (iPhone 12 mini 360px, iPhone 14 390px, etc.) ===== */
-        @@media (max-width: 640px) {
-            header {
-                flex-direction: column;
-                align-items: stretch;
-                gap: 10px;
-                padding: 10px 12px;
-                padding-top: calc(10px + env(safe-area-inset-top));
-            }
-            .brand { justify-content: center; font-size: 1rem; }
-
-            .controls { margin-left: 0; width: 100%; gap: 8px; }
-            /* El buscador ocupa todo el ancho */
-            .buscador { flex: 1 1 100%; width: 100%; }
-            .controls input[type="text"] {
-                width: 100%;
-                max-width: none;
-                font-size: 16px;        /* >=16px evita el zoom automático de iOS al enfocar */
-            }
-            .controls button {
-                flex: 1 1 0;            /* "Seguir" y "Ver todos" comparten una fila */
-                min-width: 0;
-                font-size: 15px;
-                padding: 11px 10px;     /* objetivo táctil cómodo */
-            }
-            .stat {
-                flex: 1 1 100%;
-                justify-content: center;
-                white-space: normal;
-                text-align: center;
-                font-size: .8rem;
-            }
+        /* Accesibilidad: foco visible por teclado y respeto por "menos movimiento" */
+        :focus-visible {
+            outline: 2px solid var(--accent-2);
+            outline-offset: 2px;
+            border-radius: 8px;
+        }
+        @@media (prefers-reduced-motion: reduce) {
+            * { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+            .brand .dot { animation: none; }
         }
 
-        /* Pantallas muy angostas (≤360px, iPhone 12 mini): un toque más compacto */
-        @@media (max-width: 360px) {
-            .brand { font-size: .95rem; }
-            header { gap: 8px; }
+        /* ===== Escritorio / tablet: la hoja se vuelve una tarjeta flotante ===== */
+        @@media (min-width: 680px) {
+            .topbar { left: calc(12px + env(safe-area-inset-left)); right: auto; margin: 0; }
+            .sheet {
+                left: calc(12px + env(safe-area-inset-left)); right: auto;
+                bottom: calc(12px + env(safe-area-inset-bottom));
+                width: 360px; border-radius: var(--radius); border: 1px solid var(--line);
+            }
         }
     </style>
 </head>
 <body>
-    <header>
-        <div class="brand"><span class="dot"></span>🚌 Bus en Vivo · Montevideo<span class="autor">by Lcorbo</span></div>
-        <div class="controls">
-            <div class="buscador">
-                <input type="text" id="filtro" placeholder="Línea o destino: 149 ADUANA…"
-                       autocomplete="off" role="combobox" aria-expanded="false" aria-autocomplete="list" />
-                <div id="sugerencias" class="sugerencias"></div>
+    <!-- El mapa ocupa toda la pantalla; la UI flota encima -->
+    <div id="map"></div>
+
+    <!-- Buscador flotante -->
+    <div id="topbar" class="topbar">
+        <div class="buscador">
+            <div class="searchbar">
+                <span class="lupa" aria-hidden="true">🔍</span>
+                <input type="text" id="filtro" placeholder="Buscá tu línea o destino: 149 ADUANA…"
+                       autocomplete="off" role="combobox" aria-expanded="false" aria-autocomplete="list"
+                       aria-label="Buscar línea o destino" />
+                <button id="btnBuscar">Buscar</button>
             </div>
-            <button id="btnBuscar">Seguir</button>
+            <div id="sugerencias" class="sugerencias"></div>
+        </div>
+    </div>
+
+    <!-- Banner de error (lo muestra el JS) -->
+    <div id="error" role="alert"></div>
+
+    <!-- FAB: centrar el mapa en mi ubicación -->
+    <button id="fab" class="fab" type="button" aria-label="Centrar el mapa en mi ubicación" title="Mi ubicación">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M21.3 2.7a1 1 0 0 0-1.06-.23l-16 6.13a1 1 0 0 0 .06 1.88l6.34 2.05 2.05 6.34a1 1 0 0 0 1.88.06l6.13-16a1 1 0 0 0-.4-1.23l-.04-.03z" />
+        </svg>
+    </button>
+
+    <!-- Hoja inferior: controles al alcance del pulgar -->
+    <div id="sheet" class="sheet">
+        <div class="grabber" id="grabber" role="button" tabindex="0" aria-label="Mostrar u ocultar los controles"></div>
+        <div class="sheet-head">
+            <div class="brand"><span class="dot"></span>🚌 Bus en Vivo · Montevideo<span class="autor">by Lcorbo</span></div>
+            <a id="linkInterurbano" href="/Home/Interurbano" title="Horarios interurbanos">Interurbano</a>
+        </div>
+        <div class="stat">
+            <span class="contador" id="contador" title="Próxima actualización">
+                <svg width="26" height="26" viewBox="0 0 26 26">
+                    <circle class="ring-track" cx="13" cy="13" r="9"></circle>
+                    <circle class="ring-prog" id="ringProg" cx="13" cy="13" r="9"></circle>
+                </svg>
+            </span>
+            <span><b id="count">0</b> ómnibus · cada <b>@refresco</b>s · <span id="reloj">—</span></span>
+        </div>
+        <div id="leyenda" class="leyenda"></div>
+        <div class="acciones">
             <button id="btnTodos" class="ghost">Ver todos</button>
             <button id="btnDejarSeguir" class="ghost" style="display:none">Dejar de seguir</button>
-            <a id="linkInterurbano" href="/Home/Interurbano" title="Horarios interurbanos">Interurbano</a>
-            <span class="stat">
-                <span class="contador" id="contador" title="Próxima actualización">
-                    <svg width="26" height="26" viewBox="0 0 26 26">
-                        <circle class="ring-track" cx="13" cy="13" r="9"></circle>
-                        <circle class="ring-prog" id="ringProg" cx="13" cy="13" r="9"></circle>
-                    </svg>
-                </span>
-                <b id="count">0</b> ómnibus · cada <b>@refresco</b>s · <span id="reloj">—</span>
-            </span>
         </div>
-    </header>
-    <div id="error"></div>
-    <div id="map"></div>
-    <div id="leyenda" class="leyenda"></div>
+    </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
             integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
@@ -716,6 +810,55 @@
             }
             requestAnimationFrame(tick);
         }
+
+        // --- Mi ubicación (FAB): centra el mapa donde está el usuario ---
+        const fab = document.getElementById('fab');
+        let marcadorYo = null;
+        fab.addEventListener('click', () => {
+            if (!navigator.geolocation) {
+                errorBox.textContent = '⚠ Tu navegador no permite compartir la ubicación.';
+                errorBox.style.display = 'block';
+                return;
+            }
+            fab.classList.add('cargando');
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    fab.classList.remove('cargando');
+                    const ll = [pos.coords.latitude, pos.coords.longitude];
+                    if (marcadorYo) marcadorYo.setLatLng(ll);
+                    else {
+                        marcadorYo = L.circleMarker(ll, {
+                            radius: 7, color: '#fff', weight: 2, fillColor: '#1f6feb', fillOpacity: 1
+                        }).addTo(map).bindPopup('📍 Estás acá');
+                    }
+                    map.setView(ll, Math.max(map.getZoom(), 15), { animate: true });
+                },
+                () => {
+                    fab.classList.remove('cargando');
+                    errorBox.textContent = '⚠ No pudimos obtener tu ubicación. Revisá los permisos.';
+                    errorBox.style.display = 'block';
+                },
+                { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 }
+            );
+        });
+
+        // --- Hoja inferior: colapsar/expandir para ver más mapa ---
+        const sheet = document.getElementById('sheet');
+        const grabber = document.getElementById('grabber');
+        function toggleSheet() { sheet.classList.toggle('min'); publicarAltura(); }
+        grabber.addEventListener('click', toggleSheet);
+        grabber.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSheet(); }
+        });
+
+        // Publica el alto real de la hoja como --sheet-h: el FAB y la atribución de Leaflet
+        // se acomodan por encima de ella sin números mágicos.
+        function publicarAltura() {
+            document.documentElement.style.setProperty('--sheet-h', sheet.offsetHeight + 'px');
+        }
+        if (window.ResizeObserver) new ResizeObserver(publicarAltura).observe(sheet);
+        window.addEventListener('orientationchange', () => setTimeout(publicarAltura, 200));
+        publicarAltura();
 
         // Carga el autocompletado; al terminar, admite enlaces directos (#155 o #149 ADUANA).
         cargarLineas().then(() => {
